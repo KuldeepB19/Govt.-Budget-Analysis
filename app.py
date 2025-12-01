@@ -137,22 +137,22 @@ if year_col is None:
     st.dataframe(df.head())
     st.stop()
 
-# --------- ROBUST YEAR PARSING (fixes your error) ----------
-# Extract first 4-digit year starting with '20' from each cell
-year_series = df[year_col].astype(str).str.extract(r"(20\\d{2})")[0]
+# --------- ROBUST YEAR PARSING ----------
+# ✅ FIXED REGEX: extract first 4-digit year starting with '20' from each cell
+year_series = df[year_col].astype(str).str.extract(r"(20\d{2})")[0]
 df[year_col] = pd.to_numeric(year_series, errors="coerce")
 
 df = df.dropna(subset=[year_col])
-df[year_col] = df[year_col].astype(int)
-df = df.sort_values(year_col)
-
 if df.empty:
     st.error(
         f"After parsing, no valid years were found in column `{year_col}`.\n\n"
-        "Check that it contains values like '2014-15', 'FY 2018', '2019-20 BE', etc."
+        "Sample of raw values in that column:"
     )
-    st.dataframe(df.head())
+    st.dataframe(df[[year_col]].head(20))
     st.stop()
+
+df[year_col] = df[year_col].astype(int)
+df = df.sort_values(year_col)
 
 num_cols, cat_cols = split_columns(df, year_col)
 

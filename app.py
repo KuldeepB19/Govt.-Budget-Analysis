@@ -1,676 +1,740 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from sklearn.linear_model import LinearRegression
 import numpy as np
 from io import BytesIO
+import re
 
-# ================== PAGE CONFIG ==================
+# Page Configuration
 st.set_page_config(
-    page_title="Government Budget Analytics",
-    page_icon="🇮🇳",
+    page_title="Union Budget Analytics 2014-2025",
+    page_icon="🏛️",
     layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# ================== THEME & GLOBAL STYLES ==================
-if "theme" not in st.session_state:
-    st.session_state.theme = "Dark"
-
-# Theme toggle
-with st.sidebar:
-    st.caption("Theme")
-    dark_mode = st.toggle("Dark mode", value=(st.session_state.theme == "Dark"))
-    st.session_state.theme = "Dark" if dark_mode else "Light"
-
-if st.session_state.theme == "Dark":
-    BG = "#020617"
-    CARD_BG = "#020617"
-    TEXT = "#e5e7eb"
-    SUBTEXT = "#9ca3af"
-    BORDER = "#1f2937"
-else:
-    BG = "#f9fafb"
-    CARD_BG = "#ffffff"
-    TEXT = "#020617"
-    SUBTEXT = "#4b5563"
-    BORDER = "#e5e7eb"
-
-st.markdown(
-    f"""
+# Custom CSS for modern UI
+def load_css():
+    st.markdown("""
     <style>
-    .stApp {{
-        background: {BG};
-        color: {TEXT};
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }}
-    .main-header {{
-        display: flex;
-        align-items: center;
-        gap: 0.8rem;
-        margin-bottom: 0.3rem;
-    }}
-    .main-header-title {{
+    /* Theme Variables */
+    :root {
+        --primary-color: #FF6B35;
+        --secondary-color: #004E89;
+        --background-light: #F7F9FC;
+        --background-dark: #1E1E1E;
+        --text-light: #2C3E50;
+        --text-dark: #ECEFF4;
+    }
+    
+    /* Main Container */
+    .main {
+        padding: 0rem 1rem;
+    }
+    
+    /* Navigation Bar */
+    .nav-bar {
+        background: linear-gradient(135deg, #004E89 0%, #1A659E 100%);
+        padding: 1rem 2rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .nav-title {
+        color: white;
         font-size: 1.8rem;
         font-weight: 700;
-    }}
-    .main-header-badge {{
-        font-size: 0.85rem;
-        padding: 0.2rem 0.6rem;
-        border-radius: 999px;
-        border: 1px solid {BORDER};
-        background: {CARD_BG};
-        color: {SUBTEXT};
-    }}
-    .subtitle {{
-        color: {SUBTEXT};
+        margin: 0;
+        text-align: center;
+    }
+    
+    .nav-subtitle {
+        color: #E8F1F5;
         font-size: 0.9rem;
-        margin-bottom: 0.5rem;
-    }}
-    .kpi-row {{
-        display: grid;
-        grid-template-columns: repeat(3,minmax(0,1fr));
-        gap: 0.9rem;
-        margin: 0.7rem 0 1rem 0;
-    }}
-    .kpi-card {{
-        padding: 0.8rem 1rem;
-        border-radius: 0.8rem;
-        border: 1px solid {BORDER};
-        background: {CARD_BG};
-        transition: transform 0.08s ease-out, box-shadow 0.08s ease-out;
-    }}
-    .kpi-card:hover {{
-        transform: translateY(-2px);
-        box-shadow: 0 10px 18px rgba(15,23,42,0.18);
-    }}
-    .kpi-label {{
-        font-size: 0.75rem;
+        text-align: center;
+        margin-top: 0.3rem;
+    }
+    
+    /* KPI Cards */
+    .kpi-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        border-left: 4px solid #004E89;
+        height: 100%;
+    }
+    
+    .kpi-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
+    
+    .kpi-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #004E89;
+        margin: 0.5rem 0;
+    }
+    
+    .kpi-label {
+        font-size: 0.9rem;
+        color: #6B7280;
+        font-weight: 500;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: {SUBTEXT};
-        margin-bottom: 0.2rem;
-    }}
-    .kpi-value {{
-        font-size: 1.25rem;
-        font-weight: 600;
-    }}
-    .kpi-sub {{
-        font-size: 0.8rem;
-        color: {SUBTEXT};
-        margin-top: 0.15rem;
-    }}
-    .section-title {{
-        font-size: 1.05rem;
-        font-weight: 600;
-        margin: 0.6rem 0 0.3rem 0;
-    }}
-    .ai-bubble {{
-        padding: 0.7rem 0.8rem;
-        border-radius: 0.8rem;
-        border: 1px solid {BORDER};
-        background: {CARD_BG};
-        font-size: 0.9rem;
+        letter-spacing: 0.5px;
+    }
+    
+    .kpi-change {
+        font-size: 0.85rem;
         margin-top: 0.5rem;
-    }}
-    .pill {{
-        display:inline-block;
-        padding:0.2rem 0.5rem;
-        border-radius:999px;
-        border:1px solid {BORDER};
-        font-size:0.72rem;
-        color:{SUBTEXT};
-        margin-right:0.25rem;
-        margin-bottom:0.25rem;
-    }}
+        padding: 0.3rem 0.6rem;
+        border-radius: 6px;
+        display: inline-block;
+    }
+    
+    .positive {
+        background: #D1FAE5;
+        color: #065F46;
+    }
+    
+    .negative {
+        background: #FEE2E2;
+        color: #991B1B;
+    }
+    
+    /* Section Headers */
+    .section-header {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #004E89;
+        margin: 2rem 0 1rem 0;
+        padding-bottom: 0.5rem;
+        border-bottom: 3px solid #FF6B35;
+    }
+    
+    /* Insight Box */
+    .insight-box {
+        background: linear-gradient(135deg, #FFF5F0 0%, #FFE8DC 100%);
+        padding: 1.5rem;
+        border-radius: 10px;
+        border-left: 5px solid #FF6B35;
+        margin: 1rem 0;
+    }
+    
+    .insight-title {
+        font-weight: 700;
+        color: #C2410C;
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .insight-text {
+        color: #78350F;
+        line-height: 1.6;
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        background: linear-gradient(135deg, #004E89 0%, #1A659E 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.6rem 1.5rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(0,78,137,0.3);
+    }
+    
+    /* Tables */
+    .dataframe {
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    /* Dark Mode Adjustments */
+    @media (prefers-color-scheme: dark) {
+        .kpi-card {
+            background: #2D3748;
+            color: white;
+        }
+        .kpi-value {
+            color: #63B3ED;
+        }
+    }
+    
+    /* File Uploader */
+    .uploadedFile {
+        border: 2px dashed #004E89;
+        border-radius: 10px;
+        padding: 2rem;
+        text-align: center;
+    }
     </style>
-    """,
-    unsafe_allow_html=True,
-)
+    """, unsafe_allow_html=True)
 
-# ================== DATA LOADING & DETECTION ==================
-@st.cache_data
-def load_data(path: str) -> pd.DataFrame:
-    return pd.read_csv(path)
-
-
-def detect_year_column(df: pd.DataFrame) -> str | None:
-    # 1) By name
+# Dataset Detection Functions
+def detect_year_column(df):
+    """Detect year column from various formats"""
+    patterns = [
+        r'year', r'fy', r'fiscal', r'budget.*year', r'yr',
+        r'\d{4}-\d{2}', r'\d{4}'
+    ]
     for col in df.columns:
-        cl = col.lower()
-        if "year" in cl or "fy" in cl or "financial year" in cl:
-            return col
-    # 2) by numeric 4-digit pattern
-    for col in df.columns:
-        try:
-            s = df[col].astype(str).str.extract(r"(20\d{2})")[0]
-            vals = pd.to_numeric(s, errors="coerce").dropna().unique()
-            if len(vals) == 0:
-                continue
-            if ((vals >= 2000) & (vals <= 2100)).mean() > 0.8:
+        col_lower = str(col).lower()
+        for pattern in patterns:
+            if re.search(pattern, col_lower):
                 return col
-        except Exception:
-            continue
     return None
 
-
-def detect_column(df: pd.DataFrame, keywords, exclude=None):
-    exclude = exclude or []
+def detect_category_columns(df):
+    """Detect ministry/department columns"""
+    candidates = {
+        'ministry': None,
+        'department': None,
+        'scheme': None,
+        'state': None
+    }
+    
     for col in df.columns:
-        cl = col.lower()
-        if any(kw in cl for kw in keywords) and all(ex not in cl for ex in exclude):
-            return col
-    return None
+        col_lower = str(col).lower()
+        if 'ministry' in col_lower and not candidates['ministry']:
+            candidates['ministry'] = col
+        elif 'department' in col_lower and not candidates['department']:
+            candidates['department'] = col
+        elif 'scheme' in col_lower and not candidates['scheme']:
+            candidates['scheme'] = col
+        elif 'state' in col_lower and not candidates['state']:
+            candidates['state'] = col
+    
+    return candidates
 
+def detect_numeric_columns(df, exclude_cols):
+    """Detect expenditure columns"""
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    return [col for col in numeric_cols if col not in exclude_cols]
 
-DATA_PATH = "Budget 2014-2025.csv"
-try:
-    df = load_data(DATA_PATH)
-except FileNotFoundError:
-    st.error(
-        f"CSV `{DATA_PATH}` not found. Place it next to app.py in your repo."
-    )
-    st.stop()
-
-df = df.copy()
-df.columns = [c.strip() for c in df.columns]
-
-year_col = detect_year_column(df)
-if not year_col:
-    st.error("Could not detect a Year/FY column. Please rename your year column to include 'Year' or 'FY'.")
-    st.dataframe(df.head())
-    st.stop()
-
-# Parse year robustly
-raw_year = df[year_col].astype(str)
-year_extracted = raw_year.str.extract(r"(20\d{2})")[0]
-df[year_col] = pd.to_numeric(year_extracted, errors="coerce")
-df = df.dropna(subset=[year_col])
-df[year_col] = df[year_col].astype(int)
-df = df.sort_values(year_col)
-
-if df.empty:
-    st.error("No valid years found after parsing. Check the Year column format.")
-    st.dataframe(raw_year.head(20).to_frame(name=year_col))
-    st.stop()
-
-# Numeric & category cols
-num_cols = [c for c in df.columns if np.issubdtype(df[c].dtype, np.number)]
-cat_cols = [c for c in df.columns if c not in num_cols]
-
-# Detect useful dims
-ministry_col = detect_column(df, ["ministry", "department", "head"])
-state_col = detect_column(df, ["state", "ut", "union territory"])
-be_col = detect_column(df, ["be", "budget estimate"])
-re_col = detect_column(df, ["re", "revised estimate"])
-ae_col = detect_column(df, ["ae", "actual"], exclude=["re"])
-total_default = None
-
-# Choose a default numeric column as main measure (prefer BE/Total/Expenditure)
-candidates = [
-    be_col,
-    detect_column(df, ["total", "expenditure", "outlay"]),
-]
-for c in candidates:
-    if c and c in num_cols:
-        total_default = c
-        break
-if total_default is None:
-    total_default = [c for c in num_cols if c != year_col][0]
-
-# Clean numeric columns: remove commas, spaces
-for c in num_cols:
-    if df[c].dtype == object or df[c].dtype == "O":
-        df[c] = (
-            df[c]
-            .astype(str)
-            .str.replace(",", "", regex=False)
-            .str.replace(" ", "", regex=False)
-        )
-        df[c] = pd.to_numeric(df[c], errors="coerce")
-
-# recompute num_cols after coercion
-num_cols = [c for c in df.columns if np.issubdtype(df[c].dtype, np.number)]
-
-years = sorted(df[year_col].unique())
-min_year, max_year = int(min(years)), int(max(years))
-
-# ================== SIDEBAR FILTERS ==================
-st.sidebar.header("Global Filters")
-
-year_range = st.sidebar.slider(
-    "Year range",
-    min_value=min_year,
-    max_value=max_year,
-    value=(min_year, max_year),
-    step=1,
-)
-
-measure = st.sidebar.selectbox(
-    "Primary amount measure",
-    options=[c for c in num_cols if c != year_col],
-    index=[c for c in num_cols if c != year_col].index(total_default),
-)
-
-dim_col = st.sidebar.selectbox(
-    "Break down by",
-    options=["(none)"] + cat_cols,
-    index=0,
-)
-dim_col = None if dim_col == "(none)" else dim_col
-
-st.sidebar.markdown("---")
-st.sidebar.caption("Data source: Budget 2014–2025 (custom CSV)")
-
-# Filtered dataframe
-df_filtered = df[(df[year_col] >= year_range[0]) & (df[year_col] <= year_range[1])].copy()
-
-# ================== HEADER ==================
-st.markdown(
-    f"""
-    <div class="main-header">
-        <div class="main-header-title">Union Budget Analytics</div>
-        <div class="main-header-badge">Government of India · Experimental</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-st.markdown(
-    f'<div class="subtitle">Analysis for {year_range[0]}–{year_range[1]} · Measure: <code>{measure}</code></div>',
-    unsafe_allow_html=True,
-)
-
-# fake navbar using radio
-nav_pages = [
-    "Overview",
-    "Ministries",
-    "States" if state_col else None,
-    "Forecasting",
-    "AI Insights",
-    "Downloads",
-    "About",
-]
-nav_pages = [p for p in nav_pages if p]
-
-page = st.radio(
-    "Navigation",
-    nav_pages,
-    horizontal=True,
-    label_visibility="collapsed",
-)
-
-# ================== SMALL HELPERS ==================
-def fmt_amt(x: float) -> str:
-    try:
-        x = float(x)
-    except Exception:
-        return "-"
-    if abs(x) >= 1e7:
-        return f"{x/1e7:,.1f} Cr"
-    elif abs(x) >= 1e5:
-        return f"{x/1e5:,.1f} L"
+def parse_year_column(df, year_col):
+    """Parse year column to extract numeric year"""
+    df_copy = df.copy()
+    
+    if df_copy[year_col].dtype == 'object':
+        # Handle formats like "2016-17", "FY 2019", etc.
+        df_copy['parsed_year'] = df_copy[year_col].astype(str).str.extract(r'(\d{4})')[0].astype(float)
     else:
-        return f"{x:,.0f}"
+        df_copy['parsed_year'] = df_copy[year_col]
+    
+    return df_copy
 
+# Initialize session state
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'light'
+if 'df' not in st.session_state:
+    st.session_state.df = None
 
-def yoy_growth(s: pd.Series):
-    if len(s) < 2 or s.iloc[-2] == 0 or pd.isna(s.iloc[-2]):
-        return np.nan
-    return (s.iloc[-1] - s.iloc[-2]) / s.iloc[-2] * 100
+# Load CSS
+load_css()
 
-
-# ================== KPIs (shown on most pages) ==================
-latest_year = df_filtered[year_col].max()
-prev_year = latest_year - 1
-
-latest_df = df_filtered[df_filtered[year_col] == latest_year]
-prev_df = df_filtered[df_filtered[year_col] == prev_year]
-
-total_latest = latest_df[measure].sum()
-total_prev = prev_df[measure].sum() if not prev_df.empty else np.nan
-growth_pct = (
-    (total_latest - total_prev) / total_prev * 100
-    if total_prev not in [0, np.nan] and not np.isnan(total_prev)
-    else np.nan
-)
-
-if dim_col:
-    top_cat = (
-        latest_df.groupby(dim_col)[measure].sum().sort_values(ascending=False).head(1)
-    )
-    top_cat_name = top_cat.index[0]
-    top_cat_val = top_cat.iloc[0]
-else:
-    top_cat_name = None
-    top_cat_val = None
-
-kpi_html = "<div class='kpi-row'>"
-
-# KPI 1
-kpi_html += f"""
-<div class='kpi-card'>
-  <div class='kpi-label'>Total in {latest_year}</div>
-  <div class='kpi-value'>{fmt_amt(total_latest)}</div>
-  <div class='kpi-sub'>Primary measure: {measure}</div>
+# Navigation Bar
+st.markdown("""
+<div class="nav-bar">
+    <h1 class="nav-title">🏛️ Government Budget Analytics Platform</h1>
+    <p class="nav-subtitle">Union Budget of India | 2014-2025 | Transparency · Analysis · Insights</p>
 </div>
-"""
+""", unsafe_allow_html=True)
 
-# KPI 2
-if not np.isnan(growth_pct):
-    cls = "kpi-delta-pos" if growth_pct >= 0 else "kpi-delta-neg"
-    sign = "+" if growth_pct >= 0 else ""
-    kpi_html += f"""
-    <div class='kpi-card'>
-      <div class='kpi-label'>YoY Change vs {prev_year}</div>
-      <div class='kpi-value {cls}'>{sign}{growth_pct:.1f}%</div>
-      <div class='kpi-sub'>Previous: {fmt_amt(total_prev)}</div>
-    </div>
-    """
-else:
-    kpi_html += f"""
-    <div class='kpi-card'>
-      <div class='kpi-label'>YoY Change</div>
-      <div class='kpi-value'>N/A</div>
-      <div class='kpi-sub'>Not enough data</div>
-    </div>
-    """
+# Sidebar for file upload and settings
+with st.sidebar:
+    st.header("⚙️ Settings")
+    
+    # File Upload
+    uploaded_file = st.file_uploader(
+        "Upload Budget Dataset (CSV)",
+        type=['csv'],
+        help="Upload a CSV file containing budget data"
+    )
+    
+    if uploaded_file:
+        try:
+            df = pd.read_csv(uploaded_file)
+            st.session_state.df = df
+            st.success(f"✅ Loaded {len(df)} records")
+        except Exception as e:
+            st.error(f"Error loading file: {e}")
+    
+    st.divider()
+    
+    # Theme Toggle
+    theme = st.radio("🎨 Theme", ["Light", "Dark"], index=0)
+    st.session_state.theme = theme.lower()
 
-# KPI 3
-if top_cat_name and dim_col:
-    kpi_html += f"""
-    <div class='kpi-card'>
-      <div class='kpi-label'>Top {dim_col} in {latest_year}</div>
-      <div class='kpi-value'>{top_cat_name}</div>
-      <div class='kpi-sub'>Total: {fmt_amt(top_cat_val)}</div>
-    </div>
-    """
-else:
-    kpi_html += f"""
-    <div class='kpi-card'>
-      <div class='kpi-label'>Records in selection</div>
-      <div class='kpi-value'>{len(df_filtered):,}</div>
-      <div class='kpi-sub'>Years: {year_range[0]}–{year_range[1]}</div>
-    </div>
-    """
+# Main Navigation Tabs
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📊 Overview",
+    "🏢 Ministry Analysis",
+    "🗺️ State Analysis",
+    "📈 Forecasting",
+    "🤖 AI Insights",
+    "💾 Downloads"
+])
 
-kpi_html += "</div>"
-st.markdown(kpi_html, unsafe_allow_html=True)
+# Check if data is loaded
+if st.session_state.df is None:
+    st.info("👆 Please upload a budget dataset CSV file using the sidebar to get started.")
+    st.markdown("""
+    ### 📋 Expected Dataset Format
+    Your CSV should contain:
+    - **Year Column**: e.g., "Year", "FY", "2016-17"
+    - **Category Columns**: e.g., "Ministry", "Department", "State"
+    - **Expenditure Columns**: Numeric values (BE, RE, AE, Actuals, etc.)
+    
+    The platform will automatically detect column types!
+    """)
+    st.stop()
 
-# ================== PAGE: OVERVIEW ==================
-if page == "Overview":
-    st.markdown("<div class='section-title'>Overall trend</div>", unsafe_allow_html=True)
-    agg_year = df_filtered.groupby(year_col)[measure].sum().reset_index()
-    if agg_year.empty:
-        st.info("No data for the selected filters.")
-    else:
-        st.line_chart(agg_year.set_index(year_col)[measure], height=320)
+# Load and parse data
+df = st.session_state.df.copy()
 
-    st.markdown("<div class='section-title'>Top entries (by amount)</div>", unsafe_allow_html=True)
-    top_n = st.slider("Show top N rows", 5, 50, 10, step=5, key="top_n_overview")
-    df_sorted = df_filtered.sort_values(measure, ascending=False).head(top_n)
-    st.dataframe(df_sorted, use_container_width=True)
+# Detect columns
+year_col = detect_year_column(df)
+if year_col is None:
+    st.error("❌ Could not detect a year column. Please ensure your dataset has a year/FY column.")
+    st.stop()
 
-    # Small auto-insight text
-    st.markdown("<div class='section-title'>Key insights</div>", unsafe_allow_html=True)
-    bullets = []
-    if not agg_year.empty and len(agg_year) >= 2:
-        first_val = agg_year[measure].iloc[0]
-        last_val = agg_year[measure].iloc[-1]
-        if first_val != 0:
-            change_total = (last_val - first_val) / first_val * 100
-            direction = "increased" if change_total >= 0 else "decreased"
-            bullets.append(
-                f"Total {measure} has **{direction} by {change_total:+.1f}%** between {agg_year[year_col].iloc[0]} and {agg_year[year_col].iloc[-1]}."
-            )
-    if dim_col and not df_filtered.empty:
-        by_dim_latest = latest_df.groupby(dim_col)[measure].sum().sort_values(ascending=False)
-        if len(by_dim_latest) >= 2:
-            top1, top2 = by_dim_latest.index[0], by_dim_latest.index[1]
-            bullets.append(
-                f"In {latest_year}, **{top1}** has the highest allocation, followed by **{top2}**."
-            )
+categories = detect_category_columns(df)
+df = parse_year_column(df, year_col)
 
-    if not bullets:
-        st.caption("No strong patterns detected yet – adjust filters or pick a different measure.")
-    else:
-        for b in bullets:
-            st.markdown(f"• {b}")
+# Get numeric columns
+exclude_cols = [year_col, 'parsed_year'] + [v for v in categories.values() if v]
+numeric_cols = detect_numeric_columns(df, exclude_cols)
 
-# ================== PAGE: MINISTRIES ==================
-elif page == "Ministries":
-    st.markdown("<div class='section-title'>Ministry / Department view</div>", unsafe_allow_html=True)
+if not numeric_cols:
+    st.error("❌ No numeric expenditure columns found in the dataset.")
+    st.stop()
 
-    if not ministry_col:
-        st.info("No Ministry/Department column detected. Make sure one column name contains 'Ministry' or 'Department'.")
-    else:
-        ministries = sorted(df_filtered[ministry_col].dropna().unique().tolist())
-        if not ministries:
-            st.info("No ministry records in current filter.")
-        else:
-            selected_min = st.selectbox("Select ministry / department", ministries)
-            df_min = df_filtered[df_filtered[ministry_col] == selected_min]
-
-            col1, col2 = st.columns([2, 1])
-
-            with col1:
-                st.markdown(f"**Yearly trend for {selected_min}**")
-                agg_min = df_min.groupby(year_col)[measure].sum().reset_index()
-                st.line_chart(agg_min.set_index(year_col)[measure], height=320)
-
-            with col2:
-                st.markdown("**Snapshot for latest year**")
-                latest_min = df_min[df_min[year_col] == latest_year]
-                st.dataframe(latest_min.sort_values(measure, ascending=False).head(15), use_container_width=True)
-
-            if be_col and re_col and ae_col:
-                st.markdown("<div class='section-title'>BE / RE / AE comparison (latest year)</div>", unsafe_allow_html=True)
-                cols = [be_col, re_col, ae_col]
-                latest_min_be = latest_min[[ministry_col, be_col, re_col, ae_col, year_col]]
-                df_be = latest_min_be.groupby(ministry_col)[cols].sum()
-                st.bar_chart(df_be.T, height=320)
-
-            st.markdown("**All records for this ministry (filtered years)**")
-            st.dataframe(df_min, use_container_width=True)
-
-# ================== PAGE: STATES ==================
-elif page == "States":
-    st.markdown("<div class='section-title'>State-wise analysis</div>", unsafe_allow_html=True)
-    if not state_col:
-        st.info("No State column detected.")
-    else:
-        agg_state = (
-            df_filtered.groupby(state_col)[measure]
-            .sum()
-            .reset_index()
-            .sort_values(measure, ascending=False)
+# TAB 1: OVERVIEW
+with tab1:
+    st.markdown('<h2 class="section-header">📊 Budget Overview Dashboard</h2>', unsafe_allow_html=True)
+    
+    # Year range selector
+    col1, col2 = st.columns(2)
+    with col1:
+        min_year = int(df['parsed_year'].min())
+        max_year = int(df['parsed_year'].max())
+        year_range = st.slider(
+            "Select Year Range",
+            min_value=min_year,
+            max_value=max_year,
+            value=(min_year, max_year)
         )
-        st.bar_chart(agg_state.set_index(state_col)[measure].head(25), height=360)
-        st.markdown("**State-wise table**")
-        st.dataframe(agg_state, use_container_width=True)
-        st.caption("You can later plug this into a choropleth map using India State GeoJSON.")
-
-# ================== PAGE: FORECASTING ==================
-elif page == "Forecasting":
-    st.markdown("<div class='section-title'>Budget forecasting</div>", unsafe_allow_html=True)
-    st.caption("Lightweight ML model (Linear Regression) — Streamlit Cloud friendly.")
-
-    agg = df.groupby(year_col)[measure].sum().reset_index().sort_values(year_col)
-
-    if len(agg) < 3:
-        st.warning("Not enough data for forecasting (need at least 3 years).")
+    
+    with col2:
+        selected_metric = st.selectbox("Select Expenditure Metric", numeric_cols)
+    
+    # Filter data
+    filtered_df = df[(df['parsed_year'] >= year_range[0]) & (df['parsed_year'] <= year_range[1])]
+    
+    # Calculate KPIs
+    total_expenditure = filtered_df[selected_metric].sum()
+    yearly_totals = filtered_df.groupby('parsed_year')[selected_metric].sum().sort_index()
+    
+    if len(yearly_totals) > 1:
+        yoy_growth = ((yearly_totals.iloc[-1] - yearly_totals.iloc[-2]) / yearly_totals.iloc[-2] * 100)
     else:
-        from sklearn.linear_model import LinearRegression
-
-        X = agg[[year_col]].values
-        y = agg[measure].values
-        model = LinearRegression().fit(X, y)
-
-        last_year_all = agg[year_col].max()
-        future_years = np.array(range(last_year_all + 1, last_year_all + 6)).reshape(-1, 1)
-        preds = model.predict(future_years)
-
-        df_forecast = agg.copy()
-        df_forecast["Forecast"] = np.nan
-        forecast_part = pd.DataFrame({year_col: future_years.flatten(), "Forecast": preds})
-        df_forecast = pd.concat([df_forecast, forecast_part], ignore_index=True).sort_values(year_col)
-        df_forecast = df_forecast.set_index(year_col)
-
-        st.line_chart(df_forecast, height=360)
-
-        st.markdown("**Forecast values (next 5 years)**")
-        table = pd.DataFrame(
-            {"Year": future_years.flatten(), f"Forecast_{measure}": preds}
+        yoy_growth = 0
+    
+    avg_expenditure = yearly_totals.mean()
+    
+    # Find top category
+    if categories['ministry']:
+        top_category = filtered_df.groupby(categories['ministry'])[selected_metric].sum().idxmax()
+        top_category_value = filtered_df.groupby(categories['ministry'])[selected_metric].sum().max()
+    else:
+        top_category = "N/A"
+        top_category_value = 0
+    
+    # Display KPIs
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    
+    with kpi1:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">Total Expenditure</div>
+            <div class="kpi-value">₹{total_expenditure/1e5:.2f}L Cr</div>
+            <div class="kpi-change positive">📅 {year_range[0]}-{year_range[1]}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with kpi2:
+        change_class = "positive" if yoy_growth >= 0 else "negative"
+        arrow = "📈" if yoy_growth >= 0 else "📉"
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">YoY Growth</div>
+            <div class="kpi-value">{yoy_growth:.2f}%</div>
+            <div class="kpi-change {change_class}">{arrow} Year-over-Year</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with kpi3:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">Average Annual</div>
+            <div class="kpi-value">₹{avg_expenditure/1e5:.2f}L Cr</div>
+            <div class="kpi-change positive">📊 Mean Value</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with kpi4:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">Top Category</div>
+            <div class="kpi-value" style="font-size: 1.2rem;">{top_category[:20]}</div>
+            <div class="kpi-change positive">💰 ₹{top_category_value/1e5:.2f}L Cr</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # Yearly Trend Chart
+    st.markdown('<h3 class="section-header">📈 Yearly Expenditure Trend</h3>', unsafe_allow_html=True)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=yearly_totals.index,
+        y=yearly_totals.values,
+        mode='lines+markers',
+        name=selected_metric,
+        line=dict(color='#004E89', width=3),
+        marker=dict(size=10, color='#FF6B35'),
+        fill='tozeroy',
+        fillcolor='rgba(0, 78, 137, 0.1)'
+    ))
+    
+    fig.update_layout(
+        title=f"Total {selected_metric} Over Time",
+        xaxis_title="Year",
+        yaxis_title=f"{selected_metric} (₹ Crores)",
+        hovermode='x unified',
+        template='plotly_white',
+        height=400
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # AI-Generated Insights
+    st.markdown('<h3 class="section-header">💡 Key Insights</h3>', unsafe_allow_html=True)
+    
+    growth_trend = "increasing" if yoy_growth > 0 else "decreasing"
+    
+    st.markdown(f"""
+    <div class="insight-box">
+        <div class="insight-title">📊 Automated Analysis</div>
+        <div class="insight-text">
+            • The total expenditure from {year_range[0]} to {year_range[1]} is <strong>₹{total_expenditure/1e5:.2f} Lakh Crores</strong>.<br>
+            • Year-over-year growth is <strong>{yoy_growth:.2f}%</strong>, indicating a <strong>{growth_trend}</strong> trend.<br>
+            • The highest spending category is <strong>{top_category}</strong> with ₹{top_category_value/1e5:.2f}L Cr.<br>
+            • Average annual expenditure during this period: <strong>₹{avg_expenditure/1e5:.2f}L Cr</strong>.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Top Categories Table
+    if categories['ministry']:
+        st.markdown('<h3 class="section-header">🏆 Top 10 Ministries by Expenditure</h3>', unsafe_allow_html=True)
+        
+        top_ministries = filtered_df.groupby(categories['ministry'])[selected_metric].sum().sort_values(ascending=False).head(10)
+        
+        fig_bar = px.bar(
+            x=top_ministries.values,
+            y=top_ministries.index,
+            orientation='h',
+            title=f"Top 10 Ministries - {selected_metric}",
+            labels={'x': f'{selected_metric} (₹ Crores)', 'y': 'Ministry'},
+            color=top_ministries.values,
+            color_continuous_scale='Blues'
         )
-        st.dataframe(table, use_container_width=True)
+        fig_bar.update_layout(height=500, showlegend=False)
+        
+        st.plotly_chart(fig_bar, use_container_width=True)
 
-        last_hist = y[-1]
-        growth = (preds[-1] - last_hist) / last_hist * 100 if last_hist != 0 else np.nan
-        if not np.isnan(growth):
-            st.markdown(
-                f"> By **{future_years.flatten()[-1]}**, {measure} is projected to be **{fmt_amt(preds[-1])}**, "
-                f"about **{growth:+.1f}% higher** than {agg[year_col].iloc[-1]}."
+# TAB 2: MINISTRY ANALYSIS
+with tab2:
+    st.markdown('<h2 class="section-header">🏢 Ministry Deep Dive</h2>', unsafe_allow_html=True)
+    
+    if categories['ministry']:
+        ministries = sorted(df[categories['ministry']].unique())
+        selected_ministry = st.selectbox("Select Ministry", ministries)
+        
+        ministry_df = df[df[categories['ministry']] == selected_ministry]
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown(f"### 📊 {selected_ministry}")
+            st.markdown(f"**Total Records:** {len(ministry_df)}")
+            
+            ministry_yearly = ministry_df.groupby('parsed_year')[numeric_cols].sum()
+            
+            fig = px.line(
+                ministry_yearly,
+                title=f"{selected_ministry} - Yearly Trends",
+                labels={'value': 'Amount (₹ Crores)', 'parsed_year': 'Year'}
             )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.markdown("### 📈 Latest Year Breakdown")
+            latest_year = ministry_df['parsed_year'].max()
+            latest_data = ministry_df[ministry_df['parsed_year'] == latest_year]
+            
+            if categories['department'] and categories['department'] in latest_data.columns:
+                dept_totals = latest_data.groupby(categories['department'])[selected_metric].sum().sort_values(ascending=False).head(5)
+                
+                fig_pie = px.pie(
+                    values=dept_totals.values,
+                    names=dept_totals.index,
+                    title=f"Top Departments in {int(latest_year)}"
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+        
+        # BE vs RE vs AE Comparison
+        budget_cols = [col for col in numeric_cols if any(x in col.upper() for x in ['BE', 'RE', 'AE'])]
+        if len(budget_cols) >= 2:
+            st.markdown('<h3 class="section-header">💰 Budget Estimates Comparison</h3>', unsafe_allow_html=True)
+            
+            comparison_data = ministry_yearly[budget_cols]
+            
+            fig_compare = go.Figure()
+            for col in budget_cols:
+                fig_compare.add_trace(go.Bar(name=col, x=comparison_data.index, y=comparison_data[col]))
+            
+            fig_compare.update_layout(barmode='group', title=f"{selected_ministry} - BE vs RE vs AE")
+            st.plotly_chart(fig_compare, use_container_width=True)
+        
+        # Full table
+        st.markdown('<h3 class="section-header">📋 Complete Data Table</h3>', unsafe_allow_html=True)
+        st.dataframe(ministry_df, use_container_width=True, height=400)
+    else:
+        st.warning("No ministry column detected in the dataset.")
 
-# ================== PAGE: AI INSIGHTS ==================
-elif page == "AI Insights":
-    st.markdown("<div class='section-title'>AI-style Insights Assistant (rule-based)</div>", unsafe_allow_html=True)
-    st.caption("Lightweight rule-based assistant (no external API). Ask something about trends.")
+# TAB 3: STATE ANALYSIS
+with tab3:
+    st.markdown('<h2 class="section-header">🗺️ State-Level Analysis</h2>', unsafe_allow_html=True)
+    
+    if categories['state']:
+        state_totals = filtered_df.groupby(categories['state'])[selected_metric].sum().sort_values(ascending=False)
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            fig_map = px.bar(
+                x=state_totals.values,
+                y=state_totals.index,
+                orientation='h',
+                title="State-wise Budget Allocation",
+                labels={'x': f'{selected_metric} (₹ Crores)', 'y': 'State'},
+                color=state_totals.values,
+                color_continuous_scale='Viridis'
+            )
+            fig_map.update_layout(height=600, showlegend=False)
+            st.plotly_chart(fig_map, use_container_width=True)
+        
+        with col2:
+            st.markdown("### 🏆 Top 10 States")
+            top_states_df = pd.DataFrame({
+                'State': state_totals.head(10).index,
+                'Amount (₹ Cr)': state_totals.head(10).values
+            })
+            st.dataframe(top_states_df, hide_index=True, use_container_width=True)
+    else:
+        st.info("No state column detected in this dataset.")
 
-    q = st.text_input("Ask a question (e.g., 'Which ministry grew the most after 2020?')", "")
+# TAB 4: FORECASTING
+with tab4:
+    st.markdown('<h2 class="section-header">📈 Budget Forecasting (Next 5 Years)</h2>', unsafe_allow_html=True)
+    
+    forecast_metric = st.selectbox("Select metric to forecast", numeric_cols, key='forecast_metric')
+    
+    # Prepare data for forecasting
+    yearly_data = df.groupby('parsed_year')[forecast_metric].sum().reset_index()
+    yearly_data = yearly_data.sort_values('parsed_year')
+    
+    X = yearly_data['parsed_year'].values.reshape(-1, 1)
+    y = yearly_data[forecast_metric].values
+    
+    # Train model
+    model = LinearRegression()
+    model.fit(X, y)
+    
+    # Forecast next 5 years
+    last_year = int(yearly_data['parsed_year'].max())
+    future_years = np.array([last_year + i for i in range(1, 6)]).reshape(-1, 1)
+    predictions = model.predict(future_years)
+    
+    # Visualization
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        fig = go.Figure()
+        
+        # Historical data
+        fig.add_trace(go.Scatter(
+            x=yearly_data['parsed_year'],
+            y=yearly_data[forecast_metric],
+            mode='lines+markers',
+            name='Historical',
+            line=dict(color='#004E89', width=3),
+            marker=dict(size=10)
+        ))
+        
+        # Forecast
+        fig.add_trace(go.Scatter(
+            x=future_years.flatten(),
+            y=predictions,
+            mode='lines+markers',
+            name='Forecast',
+            line=dict(color='#FF6B35', width=3, dash='dash'),
+            marker=dict(size=10, symbol='diamond')
+        ))
+        
+        fig.update_layout(
+            title=f"{forecast_metric} - 5-Year Forecast",
+            xaxis_title="Year",
+            yaxis_title=f"{forecast_metric} (₹ Crores)",
+            hovermode='x unified',
+            template='plotly_white',
+            height=500
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        st.markdown("### 📊 Forecast Results")
+        forecast_df = pd.DataFrame({
+            'Year': future_years.flatten(),
+            f'Predicted {forecast_metric}': predictions
+        })
+        st.dataframe(forecast_df, hide_index=True, use_container_width=True)
+        
+        growth_rate = ((predictions[-1] - y[-1]) / y[-1] * 100)
+        st.markdown(f"""
+        <div class="insight-box">
+            <div class="insight-title">🎯 Projection Summary</div>
+            <div class="insight-text">
+                Expected growth over next 5 years: <strong>{growth_rate:.2f}%</strong><br>
+                Projected {last_year + 5} value: <strong>₹{predictions[-1]/1e5:.2f}L Cr</strong>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    if q.strip():
-        q_low = q.lower()
-        response_lines = []
-
-        # Example: biggest increase after a year
-        if "which" in q_low and ("highest" in q_low or "largest" in q_low or "most" in q_low) and ("increase" in q_low or "growth" in q_low):
-            import re
-            yrs_in_q = re.findall(r"20\d{2}", q_low)
-            base_year = int(yrs_in_q[0]) if yrs_in_q else min_year
-            if not dim_col and ministry_col:
-                target_dim = ministry_col
-            else:
-                target_dim = dim_col or ministry_col
-
-            if not target_dim:
-                response_lines.append("I couldn't find a category column (like Ministry or State) to compare growth.")
-            else:
-                df_window = df[df[year_col] >= base_year].copy()
-                if df_window.empty:
-                    response_lines.append(f"No data found from {base_year} onwards.")
-                else:
-                    start_y = df_window[year_col].min()
-                    end_y = df_window[year_col].max()
-                    start_agg = df_window[df_window[year_col] == start_y].groupby(target_dim)[measure].sum()
-                    end_agg = df_window[df_window[year_col] == end_y].groupby(target_dim)[measure].sum()
-                    joined = pd.concat([start_agg, end_agg], axis=1, keys=["start", "end"]).dropna()
-                    joined = joined[joined["start"] != 0]
-                    joined["growth_pct"] = (joined["end"] - joined["start"]) / joined["start"] * 100
-                    if joined.empty:
-                        response_lines.append("Not enough data to compute growth for that period.")
-                    else:
-                        best = joined.sort_values("growth_pct", ascending=False).iloc[0]
-                        name = joined.sort_values("growth_pct", ascending=False).index[0]
-                        response_lines.append(
-                            f"From **{start_y}** to **{end_y}**, **{name}** shows the **highest growth** in {measure}, "
-                            f"about **{best['growth_pct']:+.1f}%**."
+# TAB 5: AI INSIGHTS
+with tab5:
+    st.markdown('<h2 class="section-header">🤖 AI-Powered Query Assistant</h2>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    Ask questions about the budget data in natural language. The system will analyze and provide insights.
+    """)
+    
+    query = st.text_input("💬 Ask a question:", placeholder="e.g., Which ministry grew the most after 2020?")
+    
+    if st.button("🔍 Analyze", type="primary"):
+        if query:
+            query_lower = query.lower()
+            
+            # Rule-based responses
+            if 'grow' in query_lower or 'increase' in query_lower:
+                if categories['ministry']:
+                    growth_df = df.groupby([categories['ministry'], 'parsed_year'])[selected_metric].sum().unstack()
+                    
+                    if '2020' in query_lower:
+                        pre_2020 = growth_df.loc[:, growth_df.columns < 2020].mean(axis=1)
+                        post_2020 = growth_df.loc[:, growth_df.columns >= 2020].mean(axis=1)
+                        growth = ((post_2020 - pre_2020) / pre_2020 * 100).sort_values(ascending=False)
+                        
+                        st.success(f"🎯 **Answer:** {growth.index[0]} showed the highest growth after 2020 with {growth.iloc[0]:.2f}% increase.")
+                        
+                        fig = px.bar(
+                            x=growth.head(10).values,
+                            y=growth.head(10).index,
+                            orientation='h',
+                            title="Top 10 Ministries by Growth (Post-2020)"
                         )
-
-        # Example: total highest in latest year
-        if any(w in q_low for w in ["total", "allocation", "spending", "expenditure"]) and ("for" in q_low or "of" in q_low):
-            target_dim = ministry_col or state_col or dim_col
-            if target_dim:
-                latest_group = latest_df.groupby(target_dim)[measure].sum().sort_values(ascending=False)
-                if not latest_group.empty:
-                    response_lines.append(
-                        f"In **{latest_year}**, the highest {measure} is for **{latest_group.index[0]}** "
-                        f"with about **{fmt_amt(latest_group.iloc[0])}**."
+                        st.plotly_chart(fig, use_container_width=True)
+            
+            elif 'highest' in query_lower or 'most' in query_lower:
+                if categories['ministry']:
+                    totals = df.groupby(categories['ministry'])[selected_metric].sum().sort_values(ascending=False)
+                    
+                    st.success(f"🎯 **Answer:** {totals.index[0]} has the highest expenditure with ₹{totals.iloc[0]/1e5:.2f} Lakh Crores.")
+                    
+                    fig = px.pie(
+                        values=totals.head(10).values,
+                        names=totals.head(10).index,
+                        title="Top 10 Ministries by Total Expenditure"
                     )
-
-        if not response_lines:
-            agg_year = df_filtered.groupby(year_col)[measure].sum().reset_index()
-            if not agg_year.empty:
-                first_val = agg_year[measure].iloc[0]
-                last_val = agg_year[measure].iloc[-1]
-                if first_val != 0:
-                    change_total = (last_val - first_val) / first_val * 100
-                    direction = "higher" if change_total >= 0 else "lower"
-                    response_lines.append(
-                        f"Across {agg_year[year_col].iloc[0]}–{agg_year[year_col].iloc[-1]}, total {measure} is about "
-                        f"**{change_total:+.1f}% {direction}**."
-                    )
+                    st.plotly_chart(fig, use_container_width=True)
+            
             else:
-                response_lines.append("I couldn't detect a clear trend with the current filters.")
+                st.info("💡 Try questions like: 'Which sector grew the most?', 'What has highest spending?', 'Show trends after 2020'")
+        else:
+            st.warning("Please enter a question.")
 
-        st.markdown("<div class='ai-bubble'>", unsafe_allow_html=True)
-        for line in response_lines:
-            st.markdown(line)
-        st.markdown("</div>", unsafe_allow_html=True)
+# TAB 6: DOWNLOADS
+with tab6:
+    st.markdown('<h2 class="section-header">💾 Download Center</h2>', unsafe_allow_html=True)
+    
+    st.markdown("Export your filtered and processed budget data in multiple formats.")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("### 📄 Filtered CSV")
+        csv = filtered_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="⬇️ Download CSV",
+            data=csv,
+            file_name=f"budget_data_{year_range[0]}_{year_range[1]}.csv",
+            mime="text/csv"
+        )
+    
+    with col2:
+        st.markdown("### 📊 Excel Format")
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            filtered_df.to_excel(writer, index=False, sheet_name='Budget Data')
+        
+        st.download_button(
+            label="⬇️ Download Excel",
+            data=buffer.getvalue(),
+            file_name=f"budget_data_{year_range[0]}_{year_range[1]}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    
+    with col3:
+        st.markdown("### 📈 Yearly Summary")
+        yearly_summary = filtered_df.groupby('parsed_year')[numeric_cols].sum().reset_index()
+        csv_summary = yearly_summary.to_csv(index=False).encode('utf-8')
+        
+        st.download_button(
+            label="⬇️ Download Summary",
+            data=csv_summary,
+            file_name=f"yearly_summary_{year_range[0]}_{year_range[1]}.csv",
+            mime="text/csv"
+        )
+    
+    st.divider()
+    
+    st.markdown("### 📋 Data Preview")
+    st.dataframe(filtered_df.head(100), use_container_width=True)
 
-    st.markdown("**Example questions:**")
-    st.markdown(
-        "<span class='pill'>Which ministry saw the highest growth after 2020?</span>"
-        "<span class='pill'>Which sector has the highest allocation in the latest year?</span>"
-        "<span class='pill'>How has total expenditure changed over time?</span>",
-        unsafe_allow_html=True,
-    )
-
-# ================== PAGE: DOWNLOADS ==================
-elif page == "Downloads":
-    st.markdown("<div class='section-title'>Download data</div>", unsafe_allow_html=True)
-    st.caption("Export the filtered dataset or aggregated views.")
-
-    csv_data = df_filtered.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Download filtered data as CSV",
-        data=csv_data,
-        file_name=f"budget_filtered_{year_range[0]}_{year_range[1]}.csv",
-        mime="text/csv",
-    )
-
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        df_filtered.to_excel(writer, sheet_name="FilteredData", index=False)
-    st.download_button(
-        "Download filtered data as Excel",
-        data=buffer.getvalue(),
-        file_name=f"budget_filtered_{year_range[0]}_{year_range[1]}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-    st.markdown("<div class='section-title'>Quick aggregated view</div>", unsafe_allow_html=True)
-    agg_year = df_filtered.groupby(year_col)[measure].sum().reset_index()
-    st.dataframe(agg_year, use_container_width=True)
-
-# ================== PAGE: ABOUT ==================
-elif page == "About":
-    st.markdown("<div class='section-title'>About this platform</div>", unsafe_allow_html=True)
-    st.markdown(
-        """
-        This experimental dashboard is designed as a **multi-audience platform** for analysing the Union Budget:
-
-        - 🟢 **Clean economic dashboard** – macro trends, aggregates, KPIs  
-        - 🔵 **Interactive research tool for students** – drill-down, filters, downloads  
-        - 🟡 **Public transparency view** – simple visuals & narrative insights  
-        - 🔴 **Policy analyst's lens** – BE/RE/AE comparisons (if columns exist), ministry focus, forecasting  
-
-        **Technical stack**
-
-        - Streamlit for the web UI  
-        - `pandas` & `numpy` for data wrangling  
-        - `scikit-learn` (LinearRegression) for simple forecasting  
-
-        You can extend this by:
-        - Plugging in a proper LLM (OpenAI, etc.) for a real AI assistant  
-        - Adding a choropleth map using India State GeoJSON  
-        - Styling it with official GoI colours and insignia
-        """
-    )
-
-    st.markdown("<div class='section-title'>Detected dataset structure</div>", unsafe_allow_html=True)
-    st.write("**Columns:**", list(df.columns))
-    st.write("**Year column:**", year_col)
-    st.write("**Measure (current):**", measure)
-    st.write("**Ministry column:**", ministry_col)
-    st.write("**State column:**", state_col)
-    st.write("**BE/RE/AE (if detected):**", {"BE": be_col, "RE": re_col, "AE": ae_col})
-
-    st.markdown("<div class='section-title'>Data preview</div>", unsafe_allow_html=True)
-    st.dataframe(df.head(), use_container_width=True)
+# Footer
+st

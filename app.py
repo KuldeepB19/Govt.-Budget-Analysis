@@ -1,1195 +1,1142 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from sklearn.linear_model import LinearRegression
-import numpy as np
-from io import BytesIO
+from sklearn.metrics import r2_score
 import re
+from io import BytesIO
+import warnings
+warnings.filterwarnings('ignore')
 
-# Page Configuration
+# ============================================
+# PAGE CONFIGURATION
+# ============================================
 st.set_page_config(
-    page_title="Union Budget Analytics 2014-2025",
-    page_icon="🏛️",
+    page_title="India Budget Analytics 2014-2025",
+    page_icon="🇮🇳",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS for modern UI
-def load_css():
-    st.markdown("""
-    <style>
-    /* Import Google Fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+# ============================================
+# CUSTOM CSS STYLING
+# ============================================
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
     * {
         font-family: 'Inter', sans-serif;
     }
     
-    /* Main Container */
-    .main {
-        padding: 0rem 1rem;
-    }
-    
-    /* Navigation Bar */
-    .nav-bar {
-        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-        padding: 1.5rem 2rem;
-        border-radius: 15px;
+    .main-header {
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #3d7ab5 100%);
+        padding: 2rem 2.5rem;
+        border-radius: 16px;
         margin-bottom: 2rem;
-        box-shadow: 0 8px 16px rgba(30, 58, 138, 0.2);
+        box-shadow: 0 10px 40px rgba(30, 58, 95, 0.3);
     }
     
-    .nav-title {
+    .main-header h1 {
         color: white;
-        font-size: 2.2rem;
+        font-size: 2.5rem;
         font-weight: 700;
         margin: 0;
-        text-align: center;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
     }
     
-    .nav-subtitle {
-        color: #dbeafe;
-        font-size: 1rem;
-        text-align: center;
+    .main-header p {
+        color: rgba(255,255,255,0.9);
+        font-size: 1.1rem;
         margin-top: 0.5rem;
-        font-weight: 500;
+        font-weight: 400;
     }
     
-    /* KPI Cards */
     .kpi-card {
-        background: white;
+        background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
         padding: 1.5rem;
-        border-radius: 15px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid rgba(0,0,0,0.05);
         transition: all 0.3s ease;
-        border-left: 5px solid #3b82f6;
         height: 100%;
     }
     
     .kpi-card:hover {
-        transform: translateY(-8px);
-        box-shadow: 0 12px 24px rgba(59, 130, 246, 0.2);
-        border-left-color: #f97316;
+        transform: translateY(-4px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.12);
     }
     
     .kpi-value {
-        font-size: 2.2rem;
+        font-size: 2rem;
         font-weight: 700;
-        color: #1e3a8a;
+        color: #1e3a5f;
         margin: 0.5rem 0;
     }
     
     .kpi-label {
-        font-size: 0.85rem;
-        color: #64748b;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .kpi-change {
         font-size: 0.9rem;
-        margin-top: 0.5rem;
-        padding: 0.4rem 0.8rem;
-        border-radius: 8px;
-        display: inline-block;
+        color: #64748b;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .kpi-delta {
+        font-size: 0.85rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 6px;
         font-weight: 600;
     }
     
-    .positive {
+    .kpi-delta.positive {
         background: #dcfce7;
         color: #166534;
     }
     
-    .negative {
+    .kpi-delta.negative {
         background: #fee2e2;
         color: #991b1b;
     }
     
-    .neutral {
-        background: #e0f2fe;
-        color: #075985;
-    }
-    
-    /* Section Headers */
     .section-header {
-        font-size: 1.6rem;
-        font-weight: 700;
-        color: #1e3a8a;
-        margin: 2rem 0 1rem 0;
-        padding-bottom: 0.5rem;
-        border-bottom: 4px solid #f97316;
-        display: inline-block;
-    }
-    
-    /* Insight Box */
-    .insight-box {
-        background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
-        padding: 1.5rem;
-        border-radius: 12px;
-        border-left: 6px solid #f97316;
-        margin: 1rem 0;
-        box-shadow: 0 2px 8px rgba(249, 115, 22, 0.1);
-    }
-    
-    .insight-title {
-        font-weight: 700;
-        color: #c2410c;
-        font-size: 1.2rem;
-        margin-bottom: 0.8rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .insight-text {
-        color: #7c2d12;
-        line-height: 1.8;
-        font-size: 0.95rem;
-    }
-    
-    /* Buttons */
-    .stButton > button {
-        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-        color: white;
-        border: none;
-        border-radius: 10px;
-        padding: 0.7rem 2rem;
+        font-size: 1.4rem;
         font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 8px rgba(30, 58, 138, 0.2);
+        color: #1e3a5f;
+        padding-bottom: 0.75rem;
+        border-bottom: 3px solid #3d7ab5;
+        margin: 2rem 0 1.5rem 0;
     }
     
-    .stButton > button:hover {
-        transform: scale(1.05);
-        box-shadow: 0 6px 16px rgba(30, 58, 138, 0.4);
+    .insight-box {
+        background: linear-gradient(145deg, #eff6ff 0%, #dbeafe 100%);
+        border-left: 5px solid #3d7ab5;
+        padding: 1.25rem 1.5rem;
+        border-radius: 0 12px 12px 0;
+        margin: 1.5rem 0;
     }
     
-    /* Download Buttons */
-    .download-section {
-        background: #f8fafc;
-        padding: 1.5rem;
-        border-radius: 12px;
-        border: 2px dashed #cbd5e1;
-        text-align: center;
-        transition: all 0.3s ease;
+    .insight-box h4 {
+        color: #1e3a5f;
+        margin: 0 0 0.5rem 0;
+        font-weight: 600;
     }
     
-    .download-section:hover {
-        border-color: #3b82f6;
-        background: #eff6ff;
+    .insight-box p {
+        color: #334155;
+        margin: 0;
+        line-height: 1.6;
     }
     
-    /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
+        background: #f1f5f9;
+        padding: 0.5rem;
+        border-radius: 12px;
     }
     
     .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        padding: 0 24px;
-        background-color: #f1f5f9;
-        border-radius: 8px 8px 0 0;
-        font-weight: 600;
+        border-radius: 8px;
+        padding: 0.75rem 1.5rem;
+        font-weight: 500;
     }
     
     .stTabs [aria-selected="true"] {
-        background-color: white;
-        color: #1e3a8a;
+        background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
+        color: white;
     }
     
-    /* File Uploader */
-    .uploadedFile {
-        border: 3px dashed #3b82f6;
-        border-radius: 12px;
-        padding: 2rem;
+    .download-btn {
+        background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .download-btn:hover {
+        transform: scale(1.02);
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+    }
+    
+    .stSelectbox label, .stMultiSelect label, .stSlider label {
+        font-weight: 500;
+        color: #374151;
+    }
+    
+    .footer {
         text-align: center;
-        background: #eff6ff;
+        padding: 2rem;
+        color: #64748b;
+        border-top: 1px solid #e2e8f0;
+        margin-top: 3rem;
     }
     
-    /* Metric Cards */
-    div[data-testid="stMetricValue"] {
-        font-size: 2rem;
-        color: #1e3a8a;
+    div[data-testid="stMetric"] {
+        background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+        padding: 1rem 1.25rem;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+        border: 1px solid rgba(0,0,0,0.04);
     }
-    </style>
-    """, unsafe_allow_html=True)
-
-# Helper functions for data processing
-def clean_numeric_column(series):
-    """Clean numeric columns that might have string values"""
-    if series.dtype == 'object':
-        # Remove commas and convert to float
-        series = series.astype(str).str.replace(',', '').str.strip()
-        series = pd.to_numeric(series, errors='coerce')
-    return series
-
-def load_and_clean_data(df):
-    """Load and clean the budget dataset"""
-    df = df.copy()
     
-    # Clean numeric columns
-    numeric_columns = [
-        'Revenue (Plan)', 'Capital (Plan)', 'Total (Plan)',
-        'Revenue (Non-Plan)', 'Capital (Non-Plan)', 'Total (Non-Plan)',
-        'Total Plan & Non-Plan'
-    ]
+    div[data-testid="stMetric"] label {
+        color: #64748b;
+        font-weight: 500;
+    }
     
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = clean_numeric_column(df[col])
-    
-    # Extract numeric year
-    if 'Year' in df.columns:
-        df['Year_Numeric'] = df['Year'].astype(str).str.extract(r'(\d{4})')[0].astype(float)
-    
-    return df
-
-# Initialize session state
-if 'theme' not in st.session_state:
-    st.session_state.theme = 'light'
-if 'df' not in st.session_state:
-    st.session_state.df = None
-
-# Load CSS
-load_css()
-
-# Navigation Bar
-st.markdown("""
-<div class="nav-bar">
-    <h1 class="nav-title">🏛️ Union Budget Analytics Platform</h1>
-    <p class="nav-subtitle">Government of India | 2014-2025 | Transparency · Insights · Analysis</p>
-</div>
+    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+        color: #1e3a5f;
+        font-weight: 700;
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# Sidebar for file upload and settings
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    
-    # File Upload
-    st.subheader("📁 Upload Dataset")
-    uploaded_file = st.file_uploader(
-        "Select Budget CSV File",
-        type=['csv'],
-        help="Upload the Budget 20142025.csv file"
-    )
-    
-    if uploaded_file:
-        try:
-            df = pd.read_csv(uploaded_file)
-            df = load_and_clean_data(df)
-            st.session_state.df = df
-            st.success(f"✅ Loaded {len(df)} records")
-            st.info(f"📅 Years: {int(df['Year_Numeric'].min())} - {int(df['Year_Numeric'].max())}")
-            st.info(f"🏢 Ministries: {df['Ministry Name'].nunique()}")
-        except Exception as e:
-            st.error(f"❌ Error loading file: {e}")
-    
-    st.divider()
-    
-    # Quick Stats
-    if st.session_state.df is not None:
-        st.subheader("📊 Dataset Info")
-        st.metric("Total Records", len(st.session_state.df))
-        st.metric("Ministries", st.session_state.df['Ministry Name'].nunique())
-        st.metric("Years Covered", int(st.session_state.df['Year_Numeric'].max() - st.session_state.df['Year_Numeric'].min() + 1))
 
-# Main Navigation Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊 Overview Dashboard",
-    "🏢 Ministry Analysis",
-    "📈 Budget Forecasting",
-    "🤖 AI Insights",
-    "💾 Download Center"
-])
+# ============================================
+# HELPER FUNCTIONS
+# ============================================
 
-# Check if data is loaded
-if st.session_state.df is None:
-    st.info("👆 **Please upload the Budget 20142025.csv file to get started!**")
-    
-    st.markdown("""
-    ### 📋 About This Platform
-    
-    This platform analyzes the **Union Budget of India (2014-2025)** and provides:
-    
-    - 📊 **Interactive Dashboards** - Visualize budget trends across years
-    - 🏢 **Ministry-wise Analysis** - Deep dive into each ministry's allocation
-    - 📈 **Forecasting** - Predict future budget allocations using ML
-    - 🤖 **AI Insights** - Ask questions in natural language
-    - 💾 **Export Options** - Download filtered data in CSV/Excel
-    
-    ---
-    
-    ### 📁 Expected Dataset Structure:
-    Your CSV should have these columns:
-    - **Ministry Name** - Name of the ministry
-    - **Year** - Budget year (e.g., 2014-15)
-    - **Revenue (Plan)** - Planned revenue expenditure
-    - **Capital (Plan)** - Planned capital expenditure
-    - **Total (Plan)** - Total planned expenditure
-    - **Revenue (Non-Plan)** - Non-plan revenue expenditure
-    - **Capital (Non-Plan)** - Non-plan capital expenditure
-    - **Total (Non-Plan)** - Total non-plan expenditure
-    - **Total Plan & Non-Plan** - Overall total expenditure
-    """)
-    
-    st.stop()
+def clean_numeric(value):
+    """Clean and convert string to numeric value."""
+    if pd.isna(value) or value == '-' or value == '':
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        cleaned = str(value).replace(',', '').replace(' ', '').strip()
+        return float(cleaned) if cleaned and cleaned != '-' else 0.0
+    except:
+        return 0.0
 
-# Load data
-df = st.session_state.df.copy()
 
-# =====================================
-# TAB 1: OVERVIEW DASHBOARD
-# =====================================
-with tab1:
-    st.markdown('<h2 class="section-header">📊 Budget Overview Dashboard</h2>', unsafe_allow_html=True)
-    
-    # Year range selector
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        min_year = int(df['Year_Numeric'].min())
-        max_year = int(df['Year_Numeric'].max())
-        year_range = st.slider(
-            "📅 Select Year Range",
-            min_value=min_year,
-            max_value=max_year,
-            value=(min_year, max_year),
-            key='overview_year_range'
-        )
-    
-    with col2:
-        metric_options = {
-            'Total Plan & Non-Plan': 'Total Budget',
-            'Total (Plan)': 'Plan Budget',
-            'Total (Non-Plan)': 'Non-Plan Budget'
-        }
-        selected_metric = st.selectbox(
-            "💰 Budget Category",
-            options=list(metric_options.keys()),
-            format_func=lambda x: metric_options[x]
-        )
-    
-    # Filter data
-    filtered_df = df[(df['Year_Numeric'] >= year_range[0]) & (df['Year_Numeric'] <= year_range[1])]
-    
-    # Calculate KPIs
-    total_budget = filtered_df[selected_metric].sum()
-    yearly_totals = filtered_df.groupby('Year_Numeric')[selected_metric].sum().sort_index()
-    
-    if len(yearly_totals) > 1:
-        yoy_growth = ((yearly_totals.iloc[-1] - yearly_totals.iloc[-2]) / yearly_totals.iloc[-2] * 100)
+def extract_year(year_str):
+    """Extract numeric year from string like '2014-15' or '2014-2015'."""
+    if pd.isna(year_str):
+        return None
+    match = re.search(r'(\d{4})', str(year_str))
+    return int(match.group(1)) if match else None
+
+
+def format_currency(value, in_crores=True):
+    """Format number as Indian currency."""
+    if value >= 100000:
+        return f"₹{value/100000:.2f}L Cr"
+    elif value >= 1000:
+        return f"₹{value/1000:.2f}K Cr"
     else:
-        yoy_growth = 0
-    
-    avg_annual = yearly_totals.mean()
-    
-    # Top ministry
-    top_ministry = filtered_df.groupby('Ministry Name')[selected_metric].sum().idxmax()
-    top_ministry_value = filtered_df.groupby('Ministry Name')[selected_metric].sum().max()
-    
-    # Display KPIs
-    st.markdown("### 📈 Key Performance Indicators")
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    
-    with kpi1:
-        st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-label">💰 Total Allocation</div>
-            <div class="kpi-value">₹{total_budget/1e5:.2f}L Cr</div>
-            <div class="kpi-change neutral">📅 {year_range[0]}-{year_range[1]}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with kpi2:
-        change_class = "positive" if yoy_growth >= 0 else "negative"
-        arrow = "📈" if yoy_growth >= 0 else "📉"
-        st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-label">📊 YoY Growth</div>
-            <div class="kpi-value">{yoy_growth:.1f}%</div>
-            <div class="kpi-change {change_class}">{arrow} {yearly_totals.index[-1]:.0f}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with kpi3:
-        st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-label">📉 Annual Average</div>
-            <div class="kpi-value">₹{avg_annual/1e5:.2f}L Cr</div>
-            <div class="kpi-change neutral">📊 Mean Allocation</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with kpi4:
-        ministry_short = top_ministry[:25] + "..." if len(top_ministry) > 25 else top_ministry
-        st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-label">🏆 Top Ministry</div>
-            <div class="kpi-value" style="font-size: 1.1rem;">{ministry_short}</div>
-            <div class="kpi-change positive">💰 ₹{top_ministry_value/1e5:.1f}L Cr</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # Yearly Trend Chart
-    st.markdown('<h3 class="section-header">📈 Budget Allocation Trends</h3>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=yearly_totals.index,
-            y=yearly_totals.values,
-            mode='lines+markers',
-            name=metric_options[selected_metric],
-            line=dict(color='#3b82f6', width=4),
-            marker=dict(size=12, color='#f97316', line=dict(color='white', width=2)),
-            fill='tozeroy',
-            fillcolor='rgba(59, 130, 246, 0.1)'
-        ))
+        return f"₹{value:.2f} Cr"
+
+
+def format_large_number(value):
+    """Format large numbers with abbreviations."""
+    if abs(value) >= 1e5:
+        return f"{value/1e5:.2f}L"
+    elif abs(value) >= 1e3:
+        return f"{value/1e3:.2f}K"
+    else:
+        return f"{value:.2f}"
+
+
+def calculate_cagr(start_value, end_value, years):
+    """Calculate Compound Annual Growth Rate."""
+    if start_value <= 0 or years <= 0:
+        return 0
+    return ((end_value / start_value) ** (1 / years) - 1) * 100
+
+
+def load_and_process_data(uploaded_file):
+    """Load and process the budget CSV file."""
+    try:
+        df = pd.read_csv(uploaded_file)
         
-        fig.update_layout(
-            title=f"<b>{metric_options[selected_metric]} Over Time</b>",
-            xaxis_title="<b>Year</b>",
-            yaxis_title="<b>Amount (₹ Crores)</b>",
-            hovermode='x unified',
-            template='plotly_white',
-            height=450,
-            font=dict(size=12),
-            title_font=dict(size=16)
-        )
+        # Clean column names
+        df.columns = df.columns.str.strip()
         
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.markdown("### 📊 Year-wise Data")
-        yearly_display = pd.DataFrame({
-            'Year': yearly_totals.index.astype(int),
-            'Amount (₹ Cr)': yearly_totals.values.round(2)
+        # Define numeric columns
+        numeric_cols = [
+            'Revenue (Plan)', 'Capital (Plan)', 'Total (Plan)',
+            'Revenue (Non-Plan)', 'Capital (Non-Plan)', 'Total (Non-Plan)',
+            'Total Plan & Non-Plan'
+        ]
+        
+        # Clean numeric columns
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = df[col].apply(clean_numeric)
+        
+        # Extract numeric year
+        df['Numeric_Year'] = df['Year'].apply(extract_year)
+        
+        # Standardize ministry names
+        df['Ministry Name'] = df['Ministry Name'].str.strip().str.upper()
+        
+        # Handle ministry name variations
+        df['Ministry Name'] = df['Ministry Name'].replace({
+            'MINISTRY OF AGRICULTURE': 'MINISTRY OF AGRICULTURE AND FARMERS WELFARE',
+            "MINISTRY OF AGRICULTURE AND FARMERS' WELFARE": 'MINISTRY OF AGRICULTURE AND FARMERS WELFARE',
         })
-        st.dataframe(yearly_display, hide_index=True, use_container_width=True, height=450)
+        
+        return df
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return None
+
+
+def generate_insights(df, year_range, budget_type):
+    """Generate automatic insights from the data."""
+    insights = []
     
-    # AI-Generated Insights
-    st.markdown('<h3 class="section-header">💡 Automated Insights</h3>', unsafe_allow_html=True)
+    filtered = df[(df['Numeric_Year'] >= year_range[0]) & (df['Numeric_Year'] <= year_range[1])]
     
-    growth_trend = "increasing" if yoy_growth > 0 else "decreasing" if yoy_growth < 0 else "stable"
+    if filtered.empty:
+        return ["No data available for the selected period."]
     
-    # Calculate additional insights
-    growth_by_year = yearly_totals.pct_change() * 100
-    max_growth_year = growth_by_year.idxmax()
-    max_growth = growth_by_year.max()
+    # Total budget trend
+    yearly_total = filtered.groupby('Numeric_Year')[budget_type].sum()
+    if len(yearly_total) > 1:
+        first_year = yearly_total.iloc[0]
+        last_year = yearly_total.iloc[-1]
+        growth = ((last_year - first_year) / first_year) * 100 if first_year > 0 else 0
+        direction = "increased" if growth > 0 else "decreased"
+        insights.append(f"📈 Total budget {direction} by {abs(growth):.1f}% from {year_range[0]} to {year_range[1]}.")
     
-    st.markdown(f"""
-    <div class="insight-box">
-        <div class="insight-title">🎯 Key Findings</div>
-        <div class="insight-text">
-            <strong>📊 Overall Trend:</strong> The {metric_options[selected_metric].lower()} from {year_range[0]} to {year_range[1]} totals <strong>₹{total_budget/1e5:.2f} Lakh Crores</strong>.<br><br>
-            
-            <strong>📈 Growth Pattern:</strong> Year-over-year growth is <strong>{yoy_growth:.2f}%</strong>, indicating a <strong>{growth_trend}</strong> trend. The highest single-year growth was <strong>{max_growth:.1f}%</strong> in <strong>{int(max_growth_year)}</strong>.<br><br>
-            
-            <strong>🏆 Top Allocation:</strong> <strong>{top_ministry}</strong> received the highest allocation with <strong>₹{top_ministry_value/1e5:.2f} Lakh Crores</strong> during this period.<br><br>
-            
-            <strong>💰 Annual Average:</strong> The average annual budget allocation is <strong>₹{avg_annual/1e5:.2f} Lakh Crores</strong>.
-        </div>
+    # Top growing ministry
+    ministry_growth = filtered.groupby('Ministry Name').apply(
+        lambda x: x[budget_type].iloc[-1] - x[budget_type].iloc[0] if len(x) > 1 else 0
+    ).sort_values(ascending=False)
+    
+    if len(ministry_growth) > 0 and ministry_growth.iloc[0] > 0:
+        top_grower = ministry_growth.index[0]
+        growth_amt = ministry_growth.iloc[0]
+        insights.append(f"🚀 {top_grower.title()} showed the highest absolute growth of ₹{format_large_number(growth_amt)} Cr.")
+    
+    # Budget concentration
+    total_budget = filtered.groupby('Ministry Name')[budget_type].sum().sort_values(ascending=False)
+    if len(total_budget) >= 2:
+        top2_share = (total_budget.iloc[:2].sum() / total_budget.sum()) * 100
+        insights.append(f"🎯 Top 2 ministries account for {top2_share:.1f}% of total allocations.")
+    
+    # YoY volatility
+    yearly_totals = filtered.groupby('Numeric_Year')[budget_type].sum()
+    if len(yearly_totals) > 2:
+        yoy_changes = yearly_totals.pct_change().dropna() * 100
+        max_change_year = yoy_changes.abs().idxmax()
+        max_change = yoy_changes[max_change_year]
+        direction = "increase" if max_change > 0 else "decrease"
+        insights.append(f"📊 Highest YoY {direction} of {abs(max_change):.1f}% occurred in {int(max_change_year)}.")
+    
+    return insights
+
+
+# ============================================
+# MAIN APPLICATION
+# ============================================
+
+def main():
+    # Header
+    st.markdown("""
+    <div class="main-header">
+        <h1>🇮🇳 India Union Budget Analytics</h1>
+        <p>Comprehensive analysis of budget allocations from 2014 to 2025</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Top Ministries
-    st.markdown('<h3 class="section-header">🏆 Top 10 Ministries by Allocation</h3>', unsafe_allow_html=True)
-    
-    top_ministries = filtered_df.groupby('Ministry Name')[selected_metric].sum().sort_values(ascending=False).head(10)
-    
-    fig_bar = px.bar(
-        y=top_ministries.index,
-        x=top_ministries.values,
-        orientation='h',
-        title=f"<b>Top 10 Ministries - {metric_options[selected_metric]}</b>",
-        labels={'x': 'Amount (₹ Crores)', 'y': 'Ministry'},
-        color=top_ministries.values,
-        color_continuous_scale='Blues',
-        text=top_ministries.values.round(2)
-    )
-    
-    fig_bar.update_traces(texttemplate='₹%{text:.2s}', textposition='outside')
-    fig_bar.update_layout(
-        height=500,
-        showlegend=False,
-        font=dict(size=11),
-        title_font=dict(size=16)
-    )
-    
-    st.plotly_chart(fig_bar, use_container_width=True)
-    
-    # Plan vs Non-Plan Breakdown
-    st.markdown('<h3 class="section-header">📊 Plan vs Non-Plan Allocation</h3>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        plan_nonplan = pd.DataFrame({
-            'Category': ['Plan Budget', 'Non-Plan Budget'],
-            'Amount': [
-                filtered_df['Total (Plan)'].sum(),
-                filtered_df['Total (Non-Plan)'].sum()
-            ]
-        })
+    # Sidebar
+    with st.sidebar:
+        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Flag_of_India.svg/255px-Flag_of_India.svg.png", width=80)
+        st.markdown("### 📂 Data Upload")
         
-        fig_pie = px.pie(
-            plan_nonplan,
-            values='Amount',
-            names='Category',
-            title='<b>Overall Distribution</b>',
-            color_discrete_sequence=['#3b82f6', '#f97316'],
-            hole=0.4
+        uploaded_file = st.file_uploader(
+            "Upload Budget CSV",
+            type=['csv'],
+            help="Upload a CSV file with budget allocation data"
         )
-        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        fig_pie.update_layout(height=400, title_font=dict(size=16))
-        st.plotly_chart(fig_pie, use_container_width=True)
-    
-    with col2:
-        # Revenue vs Capital
-        rev_cap = pd.DataFrame({
-            'Category': ['Revenue Expenditure', 'Capital Expenditure'],
-            'Amount': [
-                filtered_df['Revenue (Plan)'].sum() + filtered_df['Revenue (Non-Plan)'].sum(),
-                filtered_df['Capital (Plan)'].sum() + filtered_df['Capital (Non-Plan)'].sum()
-            ]
-        })
         
-        fig_pie2 = px.pie(
-            rev_cap,
-            values='Amount',
-            names='Category',
-            title='<b>Revenue vs Capital</b>',
-            color_discrete_sequence=['#10b981', '#8b5cf6'],
-            hole=0.4
-        )
-        fig_pie2.update_traces(textposition='inside', textinfo='percent+label')
-        fig_pie2.update_layout(height=400, title_font=dict(size=16))
-        st.plotly_chart(fig_pie2, use_container_width=True)
-
-# =====================================
-# TAB 2: MINISTRY ANALYSIS
-# =====================================
-with tab2:
-    st.markdown('<h2 class="section-header">🏢 Ministry Deep Dive Analysis</h2>', unsafe_allow_html=True)
+        st.markdown("---")
+        st.markdown("### ℹ️ About")
+        st.markdown("""
+        This dashboard provides comprehensive 
+        analytics for India's Union Budget data.
+        
+        **Features:**
+        - 📊 Overview Dashboard
+        - 🏢 Ministry Analysis
+        - 📈 ML Forecasting
+        - 🤖 AI Query System
+        - 💾 Data Downloads
+        """)
+        
+        st.markdown("---")
+        st.markdown("### 📧 Contact")
+        st.markdown("Built with ❤️ using Streamlit")
     
-    # Ministry selector
+    # Check if data is uploaded
+    if uploaded_file is None:
+        st.info("👆 Please upload a Budget CSV file using the sidebar to get started.")
+        
+        # Show sample format
+        st.markdown("### 📋 Expected CSV Format")
+        sample_data = {
+            'Ministry Name': ['MINISTRY OF DEFENCE', 'MINISTRY OF FINANCE'],
+            'Year': ['2014-2015', '2014-2015'],
+            'Revenue (Plan)': [134440, 2397.74],
+            'Capital (Plan)': [9739, 2.5],
+            'Total (Plan)': [144179, 2400.24],
+            'Revenue (Non-Plan)': [100778, 163013.91],
+            'Capital (Non-Plan)': [66085, 557.08],
+            'Total (Non-Plan)': [166863, 163570.99],
+            'Total Plan & Non-Plan': [311042, 165971.23]
+        }
+        st.dataframe(pd.DataFrame(sample_data), use_container_width=True)
+        return
+    
+    # Load and process data
+    df = load_and_process_data(uploaded_file)
+    
+    if df is None:
+        return
+    
+    # Store in session state
+    st.session_state['budget_data'] = df
+    
+    # Get data info
+    years = sorted(df['Numeric_Year'].dropna().unique())
     ministries = sorted(df['Ministry Name'].unique())
-    selected_ministry = st.selectbox("🔍 Select Ministry", ministries, key='ministry_selector')
+    min_year, max_year = int(min(years)), int(max(years))
     
-    ministry_df = df[df['Ministry Name'] == selected_ministry]
+    # Create tabs
+    tabs = st.tabs([
+        "📊 Overview Dashboard",
+        "🏢 Ministry Analysis",
+        "📈 Forecasting",
+        "🤖 AI Insights",
+        "💾 Download Center"
+    ])
     
-    # Ministry KPIs
-    st.markdown(f"### 📊 {selected_ministry}")
-    
-    m1, m2, m3, m4 = st.columns(4)
-    
-    with m1:
-        total_allocation = ministry_df['Total Plan & Non-Plan'].sum()
-        st.metric("💰 Total Allocation", f"₹{total_allocation/1e5:.2f}L Cr")
-    
-    with m2:
-        years_active = ministry_df['Year_Numeric'].nunique()
-        st.metric("📅 Years Covered", f"{years_active} years")
-    
-    with m3:
-        avg_allocation = ministry_df['Total Plan & Non-Plan'].mean()
-        st.metric("📊 Annual Average", f"₹{avg_allocation:.2f} Cr")
-    
-    with m4:
-        latest_year = ministry_df['Year_Numeric'].max()
-        latest_allocation = ministry_df[ministry_df['Year_Numeric'] == latest_year]['Total Plan & Non-Plan'].values[0]
-        st.metric("📈 Latest Allocation", f"₹{latest_allocation:.2f} Cr", f"{int(latest_year)}")
-    
-    st.divider()
-    
-    # Ministry Trends
-    col1, col2 = st.columns([3, 2])
-    
-    with col1:
-        st.markdown("### 📈 Multi-Year Trend Analysis")
+    # ============================================
+    # TAB 1: OVERVIEW DASHBOARD
+    # ============================================
+    with tabs[0]:
+        st.markdown('<p class="section-header">📊 Budget Overview Dashboard</p>', unsafe_allow_html=True)
         
-        ministry_yearly = ministry_df.groupby('Year_Numeric').agg({
-            'Total (Plan)': 'sum',
-            'Total (Non-Plan)': 'sum',
-            'Total Plan & Non-Plan': 'sum'
-        }).reset_index()
+        # Filters
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            year_range = st.slider(
+                "Select Year Range",
+                min_value=min_year,
+                max_value=max_year,
+                value=(min_year, max_year),
+                key="overview_year_range"
+            )
+        with col2:
+            budget_type = st.selectbox(
+                "Budget Type",
+                ["Total Plan & Non-Plan", "Total (Plan)", "Total (Non-Plan)"],
+                key="overview_budget_type"
+            )
         
-        fig = go.Figure()
+        # Filter data
+        filtered_df = df[(df['Numeric_Year'] >= year_range[0]) & (df['Numeric_Year'] <= year_range[1])]
         
-        fig.add_trace(go.Scatter(
-            x=ministry_yearly['Year_Numeric'],
-            y=ministry_yearly['Total (Plan)'],
-            mode='lines+markers',
-            name='Plan Budget',
-            line=dict(color='#3b82f6', width=3),
-            marker=dict(size=8)
-        ))
+        # KPI Calculations
+        total_allocation = filtered_df[budget_type].sum()
+        yearly_totals = filtered_df.groupby('Numeric_Year')[budget_type].sum()
         
-        fig.add_trace(go.Scatter(
-            x=ministry_yearly['Year_Numeric'],
-            y=ministry_yearly['Total (Non-Plan)'],
-            mode='lines+markers',
-            name='Non-Plan Budget',
-            line=dict(color='#f97316', width=3),
-            marker=dict(size=8)
-        ))
+        if len(yearly_totals) >= 2:
+            yoy_growth = ((yearly_totals.iloc[-1] - yearly_totals.iloc[-2]) / yearly_totals.iloc[-2] * 100) if yearly_totals.iloc[-2] > 0 else 0
+        else:
+            yoy_growth = 0
         
-        fig.add_trace(go.Scatter(
-            x=ministry_yearly['Year_Numeric'],
-            y=ministry_yearly['Total Plan & Non-Plan'],
-            mode='lines+markers',
-            name='Total Budget',
-            line=dict(color='#10b981', width=4, dash='dash'),
-            marker=dict(size=10)
-        ))
+        avg_allocation = yearly_totals.mean() if len(yearly_totals) > 0 else 0
         
-        fig.update_layout(
-            title=f"<b>{selected_ministry} - Yearly Trends</b>",
-            xaxis_title="<b>Year</b>",
-            yaxis_title="<b>Amount (₹ Crores)</b>",
-            hovermode='x unified',
-            template='plotly_white',
-            height=400,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
+        top_ministry = filtered_df.groupby('Ministry Name')[budget_type].sum().idxmax() if not filtered_df.empty else "N/A"
+        top_ministry_value = filtered_df.groupby('Ministry Name')[budget_type].sum().max() if not filtered_df.empty else 0
         
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.markdown("### 📊 Revenue vs Capital")
+        # KPI Cards
+        st.markdown("### Key Performance Indicators")
+        kpi_cols = st.columns(4)
         
-        rev_cap_ministry = pd.DataFrame({
-            'Type': ['Revenue', 'Capital'],
-            'Plan': [
-                ministry_df['Revenue (Plan)'].sum(),
-                ministry_df['Capital (Plan)'].sum()
-            ],
-            'Non-Plan': [
-                ministry_df['Revenue (Non-Plan)'].sum(),
-                ministry_df['Capital (Non-Plan)'].sum()
-            ]
-        })
+        with kpi_cols[0]:
+            st.metric(
+                label="Total Allocation",
+                value=format_currency(total_allocation),
+                delta=f"{yoy_growth:+.1f}% YoY" if yoy_growth != 0 else None
+            )
         
-        fig_grouped = go.Figure()
+        with kpi_cols[1]:
+            st.metric(
+                label="YoY Growth",
+                value=f"{yoy_growth:+.1f}%",
+                delta="Latest vs Previous Year"
+            )
         
-        fig_grouped.add_trace(go.Bar(
-            name='Plan',
-            x=rev_cap_ministry['Type'],
-            y=rev_cap_ministry['Plan'],
-            marker_color='#3b82f6',
-            text=rev_cap_ministry['Plan'].round(2),
-            textposition='outside'
-        ))
+        with kpi_cols[2]:
+            st.metric(
+                label="Avg Annual Allocation",
+                value=format_currency(avg_allocation)
+            )
         
-        fig_grouped.add_trace(go.Bar(
-            name='Non-Plan',
-            x=rev_cap_ministry['Type'],
-            y=rev_cap_ministry['Non-Plan'],
-            marker_color='#f97316',
-            text=rev_cap_ministry['Non-Plan'].round(2),
-            textposition='outside'
-        ))
+        with kpi_cols[3]:
+            st.metric(
+                label="Top Ministry",
+                value=top_ministry.replace("MINISTRY OF ", "").title()[:20] + "..." if len(top_ministry) > 25 else top_ministry.replace("MINISTRY OF ", "").title()
+            )
         
-        fig_grouped.update_layout(
-            barmode='group',
-            title='<b>Expenditure Breakdown</b>',
-            yaxis_title='<b>Amount (₹ Crores)</b>',
-            height=400,
-            template='plotly_white'
-        )
+        st.markdown("---")
         
-        st.plotly_chart(fig_grouped, use_container_width=True)
-    
-    # Year-over-Year Growth
-    st.markdown("### 📊 Year-over-Year Growth Rate")
-    
-    ministry_yearly_sorted = ministry_yearly.sort_values('Year_Numeric')
-    ministry_yearly_sorted['YoY Growth %'] = ministry_yearly_sorted['Total Plan & Non-Plan'].pct_change() * 100
-    
-    fig_growth = px.bar(
-        ministry_yearly_sorted[ministry_yearly_sorted['Year_Numeric'] > ministry_yearly_sorted['Year_Numeric'].min()],
-        x='Year_Numeric',
-        y='YoY Growth %',
-        title=f'<b>{selected_ministry} - Annual Growth Rate</b>',
-        color='YoY Growth %',
-        color_continuous_scale='RdYlGn',
-        text='YoY Growth %'
-    )
-    
-    fig_growth.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-    fig_growth.update_layout(height=350, template='plotly_white')
-    
-    st.plotly_chart(fig_growth, use_container_width=True)
-    
-    # Full Data Table
-    st.markdown("### 📋 Complete Ministry Data")
-    
-    display_df = ministry_df[['Year', 'Revenue (Plan)', 'Capital (Plan)', 'Total (Plan)', 
-                               'Revenue (Non-Plan)', 'Capital (Non-Plan)', 'Total (Non-Plan)', 
-                               'Total Plan & Non-Plan']].sort_values('Year', ascending=False)
-    
-    st.dataframe(display_df, use_container_width=True, height=300)
-
-# =====================================
-# TAB 3: FORECASTING
-# =====================================
-with tab3:
-    st.markdown('<h2 class="section-header">📈 Budget Forecasting (Next 5 Years)</h2>', unsafe_allow_html=True)
-    
-    st.info("🔮 Using Linear Regression to predict future budget allocations based on historical trends")
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        forecast_ministry = st.selectbox(
-            "🏢 Select Ministry for Forecast",
-            options=['All Ministries'] + sorted(df['Ministry Name'].unique()),
-            key='forecast_ministry'
-        )
-    
-    with col2:
-        forecast_metric = st.selectbox(
-            "💰 Select Budget Type",
-            options=['Total Plan & Non-Plan', 'Total (Plan)', 'Total (Non-Plan)'],
-            key='forecast_metric'
-        )
-    
-    # Prepare data
-    if forecast_ministry == 'All Ministries':
-        forecast_data = df.groupby('Year_Numeric')[forecast_metric].sum().reset_index()
-    else:
-        forecast_data = df[df['Ministry Name'] == forecast_ministry].groupby('Year_Numeric')[forecast_metric].sum().reset_index()
-    
-    forecast_data = forecast_data.sort_values('Year_Numeric')
-    
-    # Train model
-    X = forecast_data['Year_Numeric'].values.reshape(-1, 1)
-    y = forecast_data[forecast_metric].values
-    
-    model = LinearRegression()
-    model.fit(X, y)
-    
-    # Predict next 5 years
-    last_year = int(forecast_data['Year_Numeric'].max())
-    future_years = np.array([last_year + i for i in range(1, 6)]).reshape(-1, 1)
-    predictions = model.predict(future_years)
-    
-    # Visualization
-    col1, col2 = st.columns([3, 2])
-    
-    with col1:
-        fig = go.Figure()
+        # Charts Row 1
+        chart_col1, chart_col2 = st.columns(2)
         
-        # Historical data
-        fig.add_trace(go.Scatter(
-            x=forecast_data['Year_Numeric'],
-            y=forecast_data[forecast_metric],
-            mode='lines+markers',
-            name='Historical Data',
-            line=dict(color='#3b82f6', width=4),
-            marker=dict(size=12, color='#1e3a8a')
-        ))
+        with chart_col1:
+            st.markdown("#### 📈 Yearly Budget Trend")
+            yearly_data = filtered_df.groupby('Numeric_Year')[budget_type].sum().reset_index()
+            fig_trend = px.line(
+                yearly_data,
+                x='Numeric_Year',
+                y=budget_type,
+                markers=True,
+                template='plotly_white'
+            )
+            fig_trend.update_traces(
+                line=dict(color='#1e3a5f', width=3),
+                marker=dict(size=10, color='#3d7ab5')
+            )
+            fig_trend.update_layout(
+                xaxis_title="Year",
+                yaxis_title="Allocation (₹ Crores)",
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
         
-        # Forecast
-        fig.add_trace(go.Scatter(
-            x=future_years.flatten(),
-            y=predictions,
-            mode='lines+markers',
-            name='Forecast',
-            line=dict(color='#f97316', width=4, dash='dash'),
-            marker=dict(size=12, symbol='diamond', color='#ea580c')
-        ))
+        with chart_col2:
+            st.markdown("#### 🏆 Top 10 Ministries")
+            top_ministries = filtered_df.groupby('Ministry Name')[budget_type].sum().nlargest(10).reset_index()
+            top_ministries['Ministry Short'] = top_ministries['Ministry Name'].str.replace('MINISTRY OF ', '').str.title()
+            
+            fig_bar = px.bar(
+                top_ministries,
+                x=budget_type,
+                y='Ministry Short',
+                orientation='h',
+                template='plotly_white',
+                color=budget_type,
+                color_continuous_scale='Blues'
+            )
+            fig_bar.update_layout(
+                showlegend=False,
+                yaxis={'categoryorder': 'total ascending'},
+                xaxis_title="Allocation (₹ Crores)",
+                yaxis_title=""
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
         
-        # Add confidence band
-        fig.add_trace(go.Scatter(
-            x=np.concatenate([future_years.flatten(), future_years.flatten()[::-1]]),
-            y=np.concatenate([predictions * 1.1, (predictions * 0.9)[::-1]]),
-            fill='toself',
-            fillcolor='rgba(249, 115, 22, 0.2)',
-            line=dict(color='rgba(255,255,255,0)'),
-            showlegend=True,
-            name='Confidence Range (±10%)'
-        ))
+        # Charts Row 2
+        pie_col1, pie_col2 = st.columns(2)
         
-        fig.update_layout(
-            title=f"<b>{forecast_ministry} - 5-Year Budget Forecast</b>",
-            xaxis_title="<b>Year</b>",
-            yaxis_title=f"<b>{forecast_metric} (₹ Crores)</b>",
-            hovermode='x unified',
-            template='plotly_white',
-            height=500,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
+        with pie_col1:
+            st.markdown("#### 📊 Plan vs Non-Plan Distribution")
+            plan_total = filtered_df['Total (Plan)'].sum()
+            nonplan_total = filtered_df['Total (Non-Plan)'].sum()
+            
+            fig_pie1 = px.pie(
+                values=[plan_total, nonplan_total],
+                names=['Plan', 'Non-Plan'],
+                template='plotly_white',
+                color_discrete_sequence=['#1e3a5f', '#3d7ab5']
+            )
+            fig_pie1.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_pie1, use_container_width=True)
         
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.markdown("### 📊 Forecast Results")
+        with pie_col2:
+            st.markdown("#### 💰 Revenue vs Capital Expenditure")
+            revenue_total = filtered_df['Revenue (Plan)'].sum() + filtered_df['Revenue (Non-Plan)'].sum()
+            capital_total = filtered_df['Capital (Plan)'].sum() + filtered_df['Capital (Non-Plan)'].sum()
+            
+            fig_pie2 = px.pie(
+                values=[revenue_total, capital_total],
+                names=['Revenue', 'Capital'],
+                template='plotly_white',
+                color_discrete_sequence=['#059669', '#10b981']
+            )
+            fig_pie2.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_pie2, use_container_width=True)
         
-        forecast_df = pd.DataFrame({
-            'Year': future_years.flatten().astype(int),
-            'Predicted Amount (₹ Cr)': predictions.round(2),
-            'Lower Bound': (predictions * 0.9).round(2),
-            'Upper Bound': (predictions * 1.1).round(2)
-        })
-        
-        st.dataframe(forecast_df, hide_index=True, use_container_width=True)
-        
-        # Summary metrics
-        st.markdown("### 📈 Growth Projection")
-        
-        total_growth = ((predictions[-1] - y[-1]) / y[-1] * 100)
-        cagr = (((predictions[-1] / y[-1]) ** (1/5)) - 1) * 100
-        
-        st.markdown(f"""
+        # Insights Box
+        st.markdown("---")
+        insights = generate_insights(df, year_range, budget_type)
+        st.markdown("""
         <div class="insight-box">
-            <div class="insight-title">🎯 5-Year Outlook</div>
-            <div class="insight-text">
-                <strong>📊 Total Growth:</strong> {total_growth:.2f}%<br>
-                <strong>📈 CAGR:</strong> {cagr:.2f}%<br>
-                <strong>💰 {last_year + 5} Projection:</strong> ₹{predictions[-1]:.2f} Crores<br>
-                <strong>🔍 Model R² Score:</strong> {model.score(X, y):.3f}
-            </div>
+            <h4>💡 Auto-Generated Insights</h4>
         </div>
         """, unsafe_allow_html=True)
-
-# =====================================
-# TAB 4: AI INSIGHTS
-# =====================================
-with tab4:
-    st.markdown('<h2 class="section-header">🤖 AI-Powered Query Assistant</h2>', unsafe_allow_html=True)
+        for insight in insights:
+            st.markdown(f"- {insight}")
     
-    st.markdown("""
-    💬 Ask questions about the budget data in natural language. The AI assistant will analyze the data and provide insights.
-    
-    **Example questions:**
-    - Which ministry had the highest growth after 2018?
-    - Show me the top 5 ministries by total allocation
-    - What's the trend for Defence budget?
-    - Compare Plan vs Non-Plan spending over years
-    """)
-    
-    query = st.text_input(
-        "❓ Your Question:",
-        placeholder="e.g., Which ministry grew the most after 2020?",
-        key='ai_query'
-    )
-    
-    if st.button("🔍 Analyze Question", type="primary"):
-        if query:
-            query_lower = query.lower()
+    # ============================================
+    # TAB 2: MINISTRY ANALYSIS
+    # ============================================
+    with tabs[1]:
+        st.markdown('<p class="section-header">🏢 Ministry-wise Analysis</p>', unsafe_allow_html=True)
+        
+        # Ministry selector
+        selected_ministry = st.selectbox(
+            "Select Ministry",
+            options=ministries,
+            format_func=lambda x: x.replace("MINISTRY OF ", "").title()
+        )
+        
+        ministry_df = df[df['Ministry Name'] == selected_ministry].sort_values('Numeric_Year')
+        
+        if ministry_df.empty:
+            st.warning("No data available for selected ministry.")
+        else:
+            # Ministry KPIs
+            st.markdown("### Ministry KPIs")
+            m_cols = st.columns(4)
             
-            # Growth analysis
-            if any(word in query_lower for word in ['grow', 'growth', 'increase', 'rise']):
-                st.markdown("### 📊 Growth Analysis")
-                
-                # Extract year if mentioned
-                year_match = re.search(r'20\d{2}', query)
-                threshold_year = int(year_match.group()) if year_match else 2018
-                
-                pre_period = df[df['Year_Numeric'] < threshold_year].groupby('Ministry Name')['Total Plan & Non-Plan'].mean()
-                post_period = df[df['Year_Numeric'] >= threshold_year].groupby('Ministry Name')['Total Plan & Non-Plan'].mean()
-                
-                growth = ((post_period - pre_period) / pre_period * 100).sort_values(ascending=False).head(10)
-                
-                st.success(f"🎯 **Answer:** {growth.index[0]} showed the highest growth after {threshold_year} with **{growth.iloc[0]:.2f}%** increase.")
-                
-                fig = px.bar(
-                    x=growth.values,
-                    y=growth.index,
-                    orientation='h',
-                    title=f'<b>Top 10 Ministries by Growth (Post-{threshold_year})</b>',
-                    labels={'x': 'Growth Rate (%)', 'y': 'Ministry'},
-                    color=growth.values,
-                    color_continuous_scale='RdYlGn',
-                    text=growth.values
+            with m_cols[0]:
+                st.metric(
+                    "Total Allocation",
+                    format_currency(ministry_df['Total Plan & Non-Plan'].sum())
                 )
-                fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                fig.update_layout(height=500, template='plotly_white')
-                st.plotly_chart(fig, use_container_width=True)
             
-            # Top/highest queries
-            elif any(word in query_lower for word in ['highest', 'top', 'most', 'largest']):
-                st.markdown("### 🏆 Top Performers")
-                
-                # Extract number
-                num_match = re.search(r'\d+', query)
-                top_n = int(num_match.group()) if num_match else 10
-                
-                totals = df.groupby('Ministry Name')['Total Plan & Non-Plan'].sum().sort_values(ascending=False).head(top_n)
-                
-                st.success(f"🎯 **Answer:** Top {top_n} ministries by total allocation:")
-                
-                col1, col2 = st.columns([2, 1])
-                
-                with col1:
-                    fig = px.pie(
-                        values=totals.values,
-                        names=totals.index,
-                        title=f'<b>Top {top_n} Ministries - Budget Share</b>',
-                        hole=0.4
-                    )
-                    fig.update_traces(textposition='inside', textinfo='percent+label')
-                    fig.update_layout(height=500)
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                with col2:
-                    rank_df = pd.DataFrame({
-                        'Rank': range(1, len(totals) + 1),
-                        'Ministry': totals.index,
-                        'Amount (₹L Cr)': (totals.values / 1e5).round(2)
-                    })
-                    st.dataframe(rank_df, hide_index=True, use_container_width=True, height=500)
+            with m_cols[1]:
+                st.metric(
+                    "Average Annual",
+                    format_currency(ministry_df['Total Plan & Non-Plan'].mean())
+                )
             
-            # Trend analysis
-            elif 'trend' in query_lower or 'over time' in query_lower or 'years' in query_lower:
-                st.markdown("### 📈 Trend Analysis")
+            with m_cols[2]:
+                st.metric(
+                    "Years Covered",
+                    f"{len(ministry_df)} years"
+                )
+            
+            with m_cols[3]:
+                latest = ministry_df[ministry_df['Numeric_Year'] == ministry_df['Numeric_Year'].max()]['Total Plan & Non-Plan'].values
+                st.metric(
+                    "Latest Allocation",
+                    format_currency(latest[0]) if len(latest) > 0 else "N/A"
+                )
+            
+            st.markdown("---")
+            
+            # Trend Chart
+            st.markdown("#### 📈 Budget Trend Over Years")
+            fig_ministry = go.Figure()
+            
+            fig_ministry.add_trace(go.Scatter(
+                x=ministry_df['Numeric_Year'],
+                y=ministry_df['Total (Plan)'],
+                name='Plan',
+                mode='lines+markers',
+                line=dict(color='#1e3a5f', width=2)
+            ))
+            
+            fig_ministry.add_trace(go.Scatter(
+                x=ministry_df['Numeric_Year'],
+                y=ministry_df['Total (Non-Plan)'],
+                name='Non-Plan',
+                mode='lines+markers',
+                line=dict(color='#3d7ab5', width=2)
+            ))
+            
+            fig_ministry.add_trace(go.Scatter(
+                x=ministry_df['Numeric_Year'],
+                y=ministry_df['Total Plan & Non-Plan'],
+                name='Total',
+                mode='lines+markers',
+                line=dict(color='#059669', width=3)
+            ))
+            
+            fig_ministry.update_layout(
+                template='plotly_white',
+                legend=dict(orientation='h', yanchor='bottom', y=1.02),
+                xaxis_title="Year",
+                yaxis_title="Allocation (₹ Crores)"
+            )
+            st.plotly_chart(fig_ministry, use_container_width=True)
+            
+            # Revenue vs Capital
+            chart_cols = st.columns(2)
+            
+            with chart_cols[0]:
+                st.markdown("#### 💵 Revenue vs Capital (Plan)")
+                fig_rc = go.Figure()
+                fig_rc.add_trace(go.Bar(
+                    x=ministry_df['Numeric_Year'],
+                    y=ministry_df['Revenue (Plan)'],
+                    name='Revenue',
+                    marker_color='#1e3a5f'
+                ))
+                fig_rc.add_trace(go.Bar(
+                    x=ministry_df['Numeric_Year'],
+                    y=ministry_df['Capital (Plan)'],
+                    name='Capital',
+                    marker_color='#3d7ab5'
+                ))
+                fig_rc.update_layout(
+                    barmode='group',
+                    template='plotly_white',
+                    xaxis_title="Year",
+                    yaxis_title="Allocation (₹ Crores)"
+                )
+                st.plotly_chart(fig_rc, use_container_width=True)
+            
+            with chart_cols[1]:
+                st.markdown("#### 📊 YoY Growth Rate")
+                ministry_df['YoY_Growth'] = ministry_df['Total Plan & Non-Plan'].pct_change() * 100
                 
-                # Find ministry mentioned
-                mentioned_ministry = None
-                for ministry in df['Ministry Name'].unique():
-                    if ministry.lower() in query_lower:
-                        mentioned_ministry = ministry
-                        break
+                colors = ['#059669' if x >= 0 else '#dc2626' for x in ministry_df['YoY_Growth'].fillna(0)]
                 
-                if mentioned_ministry:
-                    ministry_trend = df[df['Ministry Name'] == mentioned_ministry].groupby('Year_Numeric')['Total Plan & Non-Plan'].sum()
-                    
-                    st.success(f"🎯 **Answer:** Showing budget trend for **{mentioned_ministry}**")
-                    
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(
-                        x=ministry_trend.index,
-                        y=ministry_trend.values,
-                        mode='lines+markers',
-                        name=mentioned_ministry,
-                        line=dict(color='#3b82f6', width=4),
-                        marker=dict(size=12),
-                        fill='tozeroy',
-                        fillcolor='rgba(59, 130, 246, 0.1)'
-                    ))
-                    
-                    fig.update_layout(
-                        title=f'<b>{mentioned_ministry} - Budget Trend</b>',
-                        xaxis_title='<b>Year</b>',
-                        yaxis_title='<b>Amount (₹ Crores)</b>',
-                        template='plotly_white',
-                        height=400
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Additional stats
-                    avg_allocation = ministry_trend.mean()
-                    total_allocation = ministry_trend.sum()
-                    yoy_growth = ministry_trend.pct_change().mean() * 100
-                    
-                    st.markdown(f"""
-                    <div class="insight-box">
-                        <div class="insight-title">📊 Statistics</div>
-                        <div class="insight-text">
-                            <strong>💰 Total Allocation:</strong> ₹{total_allocation/1e5:.2f} Lakh Crores<br>
-                            <strong>📊 Average Annual:</strong> ₹{avg_allocation:.2f} Crores<br>
-                            <strong>📈 Avg YoY Growth:</strong> {yoy_growth:.2f}%
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                fig_yoy = go.Figure()
+                fig_yoy.add_trace(go.Bar(
+                    x=ministry_df['Numeric_Year'],
+                    y=ministry_df['YoY_Growth'],
+                    marker_color=colors
+                ))
+                fig_yoy.update_layout(
+                    template='plotly_white',
+                    xaxis_title="Year",
+                    yaxis_title="Growth Rate (%)"
+                )
+                st.plotly_chart(fig_yoy, use_container_width=True)
+            
+            # Data Table
+            st.markdown("#### 📋 Detailed Data Table")
+            display_df = ministry_df[['Year', 'Revenue (Plan)', 'Capital (Plan)', 'Total (Plan)',
+                                      'Revenue (Non-Plan)', 'Capital (Non-Plan)', 'Total (Non-Plan)',
+                                      'Total Plan & Non-Plan']].copy()
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+    
+    # ============================================
+    # TAB 3: FORECASTING
+    # ============================================
+    with tabs[2]:
+        st.markdown('<p class="section-header">📈 Budget Forecasting</p>', unsafe_allow_html=True)
+        
+        forecast_col1, forecast_col2 = st.columns(2)
+        
+        with forecast_col1:
+            forecast_ministry = st.selectbox(
+                "Select Ministry for Forecast",
+                options=['All Ministries'] + list(ministries),
+                format_func=lambda x: x.replace("MINISTRY OF ", "").title() if x != 'All Ministries' else x
+            )
+        
+        with forecast_col2:
+            forecast_metric = st.selectbox(
+                "Select Metric",
+                ["Total Plan & Non-Plan", "Total (Plan)", "Total (Non-Plan)"]
+            )
+        
+        # Prepare data for forecasting
+        if forecast_ministry == 'All Ministries':
+            forecast_data = df.groupby('Numeric_Year')[forecast_metric].sum().reset_index()
+        else:
+            forecast_data = df[df['Ministry Name'] == forecast_ministry].groupby('Numeric_Year')[forecast_metric].sum().reset_index()
+        
+        forecast_data = forecast_data.dropna()
+        
+        if len(forecast_data) < 3:
+            st.warning("Not enough data points for forecasting. Need at least 3 years of data.")
+        else:
+            # Train model
+            X = forecast_data['Numeric_Year'].values.reshape(-1, 1)
+            y = forecast_data[forecast_metric].values
+            
+            model = LinearRegression()
+            model.fit(X, y)
+            
+            # Predictions
+            y_pred = model.predict(X)
+            r2 = r2_score(y, y_pred)
+            
+            # Future predictions
+            future_years = np.array([max_year + i for i in range(1, 6)]).reshape(-1, 1)
+            future_pred = model.predict(future_years)
+            
+            # Calculate confidence interval (simple approach)
+            residuals = y - y_pred
+            std_error = np.std(residuals)
+            
+            # Create forecast chart
+            st.markdown("#### 🔮 Historical Data & Forecast")
+            
+            fig_forecast = go.Figure()
+            
+            # Historical data
+            fig_forecast.add_trace(go.Scatter(
+                x=forecast_data['Numeric_Year'],
+                y=forecast_data[forecast_metric],
+                name='Historical',
+                mode='lines+markers',
+                line=dict(color='#1e3a5f', width=3),
+                marker=dict(size=10)
+            ))
+            
+            # Fitted line
+            fig_forecast.add_trace(go.Scatter(
+                x=forecast_data['Numeric_Year'],
+                y=y_pred,
+                name='Trend Line',
+                mode='lines',
+                line=dict(color='#3d7ab5', width=2, dash='dash')
+            ))
+            
+            # Future predictions
+            fig_forecast.add_trace(go.Scatter(
+                x=future_years.flatten(),
+                y=future_pred,
+                name='Forecast',
+                mode='lines+markers',
+                line=dict(color='#059669', width=3),
+                marker=dict(size=10, symbol='diamond')
+            ))
+            
+            # Confidence band
+            fig_forecast.add_trace(go.Scatter(
+                x=np.concatenate([future_years.flatten(), future_years.flatten()[::-1]]),
+                y=np.concatenate([future_pred + 1.96 * std_error, (future_pred - 1.96 * std_error)[::-1]]),
+                fill='toself',
+                fillcolor='rgba(16, 185, 129, 0.2)',
+                line=dict(color='rgba(255,255,255,0)'),
+                name='95% Confidence'
+            ))
+            
+            fig_forecast.update_layout(
+                template='plotly_white',
+                xaxis_title="Year",
+                yaxis_title="Allocation (₹ Crores)",
+                legend=dict(orientation='h', yanchor='bottom', y=1.02),
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig_forecast, use_container_width=True)
+            
+            # Forecast metrics
+            st.markdown("#### 📊 Forecast Metrics")
+            metric_cols = st.columns(4)
+            
+            with metric_cols[0]:
+                total_growth = ((future_pred[-1] - y[-1]) / y[-1] * 100) if y[-1] > 0 else 0
+                st.metric("Projected 5-Year Growth", f"{total_growth:+.1f}%")
+            
+            with metric_cols[1]:
+                cagr = calculate_cagr(y[-1], future_pred[-1], 5)
+                st.metric("Projected CAGR", f"{cagr:.2f}%")
+            
+            with metric_cols[2]:
+                st.metric("Model R² Score", f"{r2:.4f}")
+            
+            with metric_cols[3]:
+                st.metric("Trend Slope", f"₹{model.coef_[0]:,.0f} Cr/year")
+            
+            # Forecast table
+            st.markdown("#### 📋 Forecast Details")
+            forecast_table = pd.DataFrame({
+                'Year': future_years.flatten(),
+                'Predicted Allocation (₹ Cr)': future_pred.round(2),
+                'Lower Bound (₹ Cr)': (future_pred - 1.96 * std_error).round(2),
+                'Upper Bound (₹ Cr)': (future_pred + 1.96 * std_error).round(2)
+            })
+            st.dataframe(forecast_table, use_container_width=True, hide_index=True)
+    
+    # ============================================
+    # TAB 4: AI INSIGHTS (Rule-Based NLP)
+    # ============================================
+    with tabs[3]:
+        st.markdown('<p class="section-header">🤖 AI-Powered Query System</p>', unsafe_allow_html=True)
+        
+        st.markdown("""
+        Ask questions about the budget data in natural language. Try queries like:
+        - "Which ministry grew the most after 2018?"
+        - "Top 5 ministries by budget"
+        - "Trend for Defence budget"
+        - "Compare Plan vs Non-Plan"
+        - "Total budget in 2020"
+        """)
+        
+        user_query = st.text_input("🔍 Enter your question:", placeholder="e.g., Which ministry has the highest budget?")
+        
+        if user_query:
+            query_lower = user_query.lower()
+            
+            # Intent detection
+            response_text = ""
+            show_chart = False
+            chart_data = None
+            chart_type = None
+            
+            # Pattern: Top N ministries
+            if re.search(r'top\s*(\d+)', query_lower) or 'highest' in query_lower or 'largest' in query_lower:
+                match = re.search(r'top\s*(\d+)', query_lower)
+                n = int(match.group(1)) if match else 5
+                
+                year_match = re.search(r'(20\d{2})', query_lower)
+                if year_match:
+                    year = int(year_match.group(1))
+                    year_df = df[df['Numeric_Year'] == year]
+                    top_n = year_df.groupby('Ministry Name')['Total Plan & Non-Plan'].sum().nlargest(n)
+                    response_text = f"**Top {n} Ministries by Budget in {year}:**\n"
                 else:
-                    st.warning("Please mention a specific ministry name in your question.")
-            
-            # Compare queries
-            elif 'compare' in query_lower or 'vs' in query_lower or 'versus' in query_lower:
-                st.markdown("### ⚖️ Comparative Analysis")
+                    top_n = df.groupby('Ministry Name')['Total Plan & Non-Plan'].sum().nlargest(n)
+                    response_text = f"**Top {n} Ministries by Total Budget (All Years):**\n"
                 
-                if 'plan' in query_lower and 'non-plan' in query_lower:
-                    yearly_comparison = df.groupby('Year_Numeric').agg({
-                        'Total (Plan)': 'sum',
-                        'Total (Non-Plan)': 'sum'
-                    })
-                    
-                    st.success("🎯 **Answer:** Plan vs Non-Plan budget comparison over years")
-                    
-                    fig = go.Figure()
-                    
-                    fig.add_trace(go.Bar(
-                        name='Plan Budget',
-                        x=yearly_comparison.index,
-                        y=yearly_comparison['Total (Plan)'],
-                        marker_color='#3b82f6'
-                    ))
-                    
-                    fig.add_trace(go.Bar(
-                        name='Non-Plan Budget',
-                        x=yearly_comparison.index,
-                        y=yearly_comparison['Total (Non-Plan)'],
-                        marker_color='#f97316'
-                    ))
-                    
-                    fig.update_layout(
-                        barmode='group',
-                        title='<b>Plan vs Non-Plan Budget Trends</b>',
-                        xaxis_title='<b>Year</b>',
-                        yaxis_title='<b>Amount (₹ Crores)</b>',
-                        template='plotly_white',
-                        height=450
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
+                for i, (ministry, value) in enumerate(top_n.items(), 1):
+                    response_text += f"\n{i}. {ministry.replace('MINISTRY OF ', '').title()}: {format_currency(value)}"
+                
+                chart_data = top_n.reset_index()
+                chart_data.columns = ['Ministry', 'Budget']
+                chart_type = 'bar'
+                show_chart = True
+            
+            # Pattern: Growth analysis
+            elif 'grew' in query_lower or 'growth' in query_lower or 'increased' in query_lower:
+                year_match = re.search(r'after\s*(20\d{2})', query_lower)
+                start_year = int(year_match.group(1)) if year_match else min_year
+                
+                filtered = df[df['Numeric_Year'] >= start_year]
+                
+                growth_data = filtered.groupby('Ministry Name').apply(
+                    lambda x: ((x['Total Plan & Non-Plan'].iloc[-1] - x['Total Plan & Non-Plan'].iloc[0]) / 
+                              x['Total Plan & Non-Plan'].iloc[0] * 100) if len(x) > 1 and x['Total Plan & Non-Plan'].iloc[0] > 0 else 0
+                ).sort_values(ascending=False)
+                
+                top_grower = growth_data.index[0]
+                top_growth = growth_data.iloc[0]
+                
+                response_text = f"**Ministry with Highest Growth since {start_year}:**\n\n"
+                response_text += f"🏆 {top_grower.replace('MINISTRY OF ', '').title()} with **{top_growth:.1f}%** growth\n\n"
+                response_text += "**Top 5 by Growth Rate:**\n"
+                
+                for ministry, growth in growth_data.head(5).items():
+                    response_text += f"\n- {ministry.replace('MINISTRY OF ', '').title()}: {growth:+.1f}%"
+                
+                chart_data = growth_data.head(10).reset_index()
+                chart_data.columns = ['Ministry', 'Growth %']
+                chart_type = 'bar'
+                show_chart = True
+            
+            # Pattern: Trend for specific ministry
+            elif 'trend' in query_lower:
+                for ministry in ministries:
+                    if any(word in query_lower for word in ministry.lower().split()):
+                        ministry_df = df[df['Ministry Name'] == ministry].sort_values('Numeric_Year')
+                        response_text = f"**Budget Trend for {ministry.replace('MINISTRY OF ', '').title()}:**\n\n"
+                        
+                        if len(ministry_df) > 1:
+                            first_val = ministry_df['Total Plan & Non-Plan'].iloc[0]
+                            last_val = ministry_df['Total Plan & Non-Plan'].iloc[-1]
+                            growth = ((last_val - first_val) / first_val * 100) if first_val > 0 else 0
+                            
+                            response_text += f"- First Year ({ministry_df['Numeric_Year'].iloc[0]}): {format_currency(first_val)}\n"
+                            response_text += f"- Latest Year ({ministry_df['Numeric_Year'].iloc[-1]}): {format_currency(last_val)}\n"
+                            response_text += f"- Overall Growth: **{growth:+.1f}%**"
+                        
+                        chart_data = ministry_df[['Numeric_Year', 'Total Plan & Non-Plan']].copy()
+                        chart_data.columns = ['Year', 'Budget']
+                        chart_type = 'line'
+                        show_chart = True
+                        break
+            
+            # Pattern: Compare Plan vs Non-Plan
+            elif 'plan' in query_lower and 'non' in query_lower:
+                plan_total = df['Total (Plan)'].sum()
+                nonplan_total = df['Total (Non-Plan)'].sum()
+                
+                response_text = f"**Plan vs Non-Plan Comparison:**\n\n"
+                response_text += f"- Total Plan Budget: {format_currency(plan_total)}\n"
+                response_text += f"- Total Non-Plan Budget: {format_currency(nonplan_total)}\n"
+                response_text += f"- Plan Share: **{(plan_total/(plan_total+nonplan_total)*100):.1f}%**\n"
+                response_text += f"- Non-Plan Share: **{(nonplan_total/(plan_total+nonplan_total)*100):.1f}%**"
+                
+                chart_data = pd.DataFrame({
+                    'Type': ['Plan', 'Non-Plan'],
+                    'Amount': [plan_total, nonplan_total]
+                })
+                chart_type = 'pie'
+                show_chart = True
+            
+            # Pattern: Total budget in specific year
+            elif re.search(r'(20\d{2})', query_lower) and ('total' in query_lower or 'budget' in query_lower):
+                year_match = re.search(r'(20\d{2})', query_lower)
+                year = int(year_match.group(1))
+                
+                year_df = df[df['Numeric_Year'] == year]
+                total = year_df['Total Plan & Non-Plan'].sum()
+                
+                response_text = f"**Total Budget in {year}:**\n\n"
+                response_text += f"💰 {format_currency(total)}\n\n"
+                response_text += f"**Ministry-wise Breakdown:**\n"
+                
+                ministry_breakdown = year_df.groupby('Ministry Name')['Total Plan & Non-Plan'].sum().sort_values(ascending=False)
+                for ministry, value in ministry_breakdown.head(5).items():
+                    response_text += f"\n- {ministry.replace('MINISTRY OF ', '').title()}: {format_currency(value)}"
+                
+                chart_data = ministry_breakdown.head(10).reset_index()
+                chart_data.columns = ['Ministry', 'Budget']
+                chart_type = 'bar'
+                show_chart = True
             
             else:
-                st.info("💡 **Suggestion:** Try asking about growth, top ministries, trends, or comparisons!")
+                response_text = """
+                I couldn't understand your query. Try asking:
+                - "Top 5 ministries by budget"
+                - "Which ministry grew the most after 2018?"
+                - "Trend for Defence budget"
+                - "Compare Plan vs Non-Plan"
+                - "Total budget in 2020"
+                """
+            
+            # Display response
+            st.markdown(response_text)
+            
+            # Display chart if applicable
+            if show_chart and chart_data is not None:
+                st.markdown("---")
+                if chart_type == 'bar':
+                    chart_data['Short Name'] = chart_data.iloc[:, 0].str.replace('MINISTRY OF ', '').str.title()
+                    fig = px.bar(
+                        chart_data,
+                        x=chart_data.columns[1],
+                        y='Short Name',
+                        orientation='h',
+                        template='plotly_white',
+                        color=chart_data.columns[1],
+                        color_continuous_scale='Blues'
+                    )
+                    fig.update_layout(showlegend=False, yaxis={'categoryorder': 'total ascending'})
+                elif chart_type == 'line':
+                    fig = px.line(
+                        chart_data,
+                        x='Year',
+                        y='Budget',
+                        markers=True,
+                        template='plotly_white'
+                    )
+                    fig.update_traces(line=dict(color='#1e3a5f', width=3))
+                elif chart_type == 'pie':
+                    fig = px.pie(
+                        chart_data,
+                        values='Amount',
+                        names='Type',
+                        template='plotly_white',
+                        color_discrete_sequence=['#1e3a5f', '#3d7ab5']
+                    )
+                
+                st.plotly_chart(fig, use_container_width=True)
+    
+    # ============================================
+    # TAB 5: DOWNLOAD CENTER
+    # ============================================
+    with tabs[4]:
+        st.markdown('<p class="section-header">💾 Download Center</p>', unsafe_allow_html=True)
         
-        else:
-            st.warning("⚠️ Please enter a question.")
+        # Filters for download
+        st.markdown("### Filter Data for Download")
+        
+        dl_col1, dl_col2 = st.columns(2)
+        
+        with dl_col1:
+            dl_year_range = st.slider(
+                "Year Range",
+                min_value=min_year,
+                max_value=max_year,
+                value=(min_year, max_year),
+                key="download_year_range"
+            )
+        
+        with dl_col2:
+            dl_ministries = st.multiselect(
+                "Select Ministries",
+                options=ministries,
+                default=ministries[:3],
+                format_func=lambda x: x.replace("MINISTRY OF ", "").title()
+            )
+        
+        # Filter data
+        filtered_download = df[
+            (df['Numeric_Year'] >= dl_year_range[0]) &
+            (df['Numeric_Year'] <= dl_year_range[1]) &
+            (df['Ministry Name'].isin(dl_ministries) if dl_ministries else True)
+        ]
+        
+        # Preview
+        st.markdown("### Data Preview")
+        st.dataframe(filtered_download.head(20), use_container_width=True, hide_index=True)
+        st.caption(f"Showing first 20 of {len(filtered_download)} rows")
+        
+        st.markdown("---")
+        
+        # Download buttons
+        st.markdown("### Download Options")
+        
+        download_cols = st.columns(4)
+        
+        with download_cols[0]:
+            csv_data = filtered_download.to_csv(index=False)
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv_data,
+                file_name="budget_data_filtered.csv",
+                mime="text/csv"
+            )
+        
+        with download_cols[1]:
+            buffer = BytesIO()
+            filtered_download.to_excel(buffer, index=False, engine='openpyxl')
+            st.download_button(
+                label="📥 Download Excel",
+                data=buffer.getvalue(),
+                file_name="budget_data_filtered.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        
+        with download_cols[2]:
+            yearly_summary = filtered_download.groupby('Numeric_Year').agg({
+                'Total (Plan)': 'sum',
+                'Total (Non-Plan)': 'sum',
+                'Total Plan & Non-Plan': 'sum'
+            }).reset_index()
+            yearly_csv = yearly_summary.to_csv(index=False)
+            st.download_button(
+                label="📥 Yearly Summary",
+                data=yearly_csv,
+                file_name="yearly_summary.csv",
+                mime="text/csv"
+            )
+        
+        with download_cols[3]:
+            ministry_summary = filtered_download.groupby('Ministry Name').agg({
+                'Total (Plan)': 'sum',
+                'Total (Non-Plan)': 'sum',
+                'Total Plan & Non-Plan': 'sum'
+            }).reset_index()
+            ministry_csv = ministry_summary.to_csv(index=False)
+            st.download_button(
+                label="📥 Ministry Summary",
+                data=ministry_csv,
+                file_name="ministry_summary.csv",
+                mime="text/csv"
+            )
+    
+    # Footer
+    st.markdown("""
+    <div class="footer">
+        <p>🇮🇳 India Union Budget Analytics Dashboard | Built with Streamlit & Plotly</p>
+        <p>Data Source: Government of India Budget Documents (2014-2025)</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# =====================================
-# TAB 5: DOWNLOAD CENTER
-# =====================================
-with tab5:
-    st.markdown('<h2 class="section-header">💾 Download & Export Center</h2>', unsafe_allow_html=True)
-    
-    st.markdown("📥 Export your budget data in multiple formats for further analysis")
-    
-    # Year range for download
-    dl_col1, dl_col2 = st.columns(2)
-    with dl_col1:
-        dl_year_range = st.slider(
-            "Select Year Range for Export",
-            min_value=int(df['Year_Numeric'].min()),
-            max_value=int(df['Year_Numeric'].max()),
-            value=(int(df['Year_Numeric'].min()), int(df['Year_Numeric'].max())),
-            key='download_year_range'
-        )
-    
-    with dl_col2:
-        dl_ministries = st.multiselect(
-            "Filter by Ministries (Optional)",
-            options=sorted(df['Ministry Name'].unique()),
-            default=[],
-            key='download_ministries'
-        )
-    
-    # Apply filters
-    download_df = df[(df['Year_Numeric'] >= dl_year_range[0]) & (df['Year_Numeric'] <= dl_year_range[1])]
-    
-    if dl_ministries:
-        download_df = download_df[download_df['Ministry Name'].isin(dl_ministries)]
-    
-    st.info(f"📊 **Records to export:** {len(download_df)} rows")
-    
-    st.divider()
-    
-    # Download options
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        <div class="download-section">
-            <h3>📄 CSV Format</h3>
-            <p>Filtered budget data in CSV format</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        csv = download_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="⬇️ Download CSV",
-            data=csv,
-            file_name=f"budget_data_{dl_year_range[0]}_{dl_year_range[1]}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-    
-    with col2:
-        st.markdown("""
-        <div class="download-section">
-            <h3>📊 Excel Format</h3>
-            <p>Data with formatting in Excel</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            download_df.to_excel(writer, index=False, sheet_name='Budget Data')
-        
-        st.download_button(
-            label="⬇️ Download Excel",
-            data=buffer.getvalue(),
-            file_name=f"budget_data_{dl_year_range[0]}_{dl_year_range[1]}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-    
-    with col3:
-        st.markdown("""
-        <div class="download-section">
-            <h3>📈 Yearly Summary</h3>
-            <p>Aggregated year-wise totals</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        yearly_summary = download_df.groupby(['Year']).agg({
-            'Total (Plan)': 'sum',
-            'Total (Non-Plan)': 'sum',
-            'Total Plan & Non-Plan': 'sum'
-        }).reset_index()
-        
-        csv_summary = yearly_summary.to_csv(index=False).encode('utf-8')
-        
-        st.download_button(
-            label="⬇️ Download Summary",
-            data=csv_summary,
-            file_name=f"yearly_summary_{dl_year_range[0]}_{dl_year_range[1]}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-    
-    st.divider()
-    
-    # Ministry-wise summary download
-    st.markdown("### 🏢 Ministry-wise Summary Export")
-    
-    ministry_summary = download_df.groupby('Ministry Name').agg({
-        'Total (Plan)': 'sum',
-        'Total (Non-Plan)': 'sum',
-        'Total Plan & Non-Plan': 'sum',
-        'Revenue (Plan)': 'sum',
-        'Capital (Plan)': 'sum',
-        'Revenue (Non-Plan)': 'sum',
-        'Capital (Non-Plan)': 'sum'
-    }).reset_index().sort_values('Total Plan & Non-Plan', ascending=False)
-    
-    ministry_summary_csv = ministry_summary.to_csv(index=False).encode('utf-8')
-    
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.dataframe(ministry_summary, use_container_width=True, height=400)
-    with col2:
-        st.download_button(
-            label="⬇️ Download Ministry Summary",
-            data=ministry_summary_csv,
-            file_name=f"ministry_summary_{dl_year_range[0]}_{dl_year_range[1]}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-    
-    st.divider()
-    
-    # Full data preview
-    st.markdown("### 📋 Data Preview")
-    st.dataframe(download_df.head(100), use_container_width=True)
 
-# Footer
-st.divider()
-st.markdown("""
-<div style='text-align: center; color: #64748b; padding: 2rem 0;'>
-    <p><strong>Union Budget Analytics Platform</strong> | Government of India 2014-2025</p>
-    <p>Built with ❤️ using Streamlit, Python, Pandas & Plotly</p>
-    <p style='font-size: 0.85rem;'>Data Transparency · Evidence-Based Insights · Public Accountability</p>
-</div>
-""", unsafe_allow_html=True)
+if __name__ == "__main__":
+    main()
